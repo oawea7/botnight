@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 const moment = require('moment-timezone');
+const http = require('http'); // ⬅️ NEW: Required for the Keep-Alive server
 
 const client = new Client({
     intents: [
@@ -61,5 +62,18 @@ client.on("guildMemberAdd", async (member) => {
     });
 });
 
-// ✅ SAFE TOKEN HANDLING — works on GitHub, WispByte, Railway, etc.
+// --- KEEP-ALIVE SERVER FOR RENDER (Starts a tiny web server) ---
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('Bot is alive!');
+});
+
+// Render automatically sets the PORT environment variable
+server.listen(process.env.PORT || 3000, () => {
+  console.log(`Keep-alive server is listening on port ${process.env.PORT || 3000}`);
+});
+
+// --- END KEEP-ALIVE SERVER ---
+
+// ✅ SAFE TOKEN HANDLING — The bot starts connecting to Discord AFTER the web server starts
 client.login(process.env.BOT_TOKEN);
