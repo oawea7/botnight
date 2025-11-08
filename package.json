@@ -1,14 +1,14 @@
 {
-  "name": "my-render-bot",
+  "name": "adalea-bot",
   "version": "1.0.0",
-  "description": "A simple bot hosted on Render",
+  "description": "Welcome bot for Adalea Roblox group.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.0.0" 
-    // If your code uses other libraries (like axios or dotenv), 
-    // you MUST list them here in the format: "library-name": "^version"
+    "discord.js": "^14.0.0",
+    "moment": "^2.29.4",
+    "moment-timezone": "^0.5.43" 
   }
 }
