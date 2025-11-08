@@ -16,7 +16,7 @@ const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
 // CHANNEL TO SEND WELCOME MESSAGE IN
-const WELCOME_CHANNEL_ID = "YOUR_CHANNEL_ID"; // put the welcome channel id here
+const WELCOME_CHANNEL_ID = "1436747102897049714"; // put the welcome channel id here
 
 client.on("guildMemberAdd", async (member) => {
     const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
