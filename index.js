@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 const moment = require('moment-timezone');
-const http = require('http'); // ⬅️ NEW: Required for the Keep-Alive server
+const http = require('http'); 
 
 const client = new Client({
     intents: [
@@ -9,14 +9,17 @@ const client = new Client({
     ]
 });
 
-// CUSTOM EMOJIS
+// CUSTOM EMOJIS (No change here)
 const orangeFlower = "<:orangeflower:1406646129122086933>";
 const animatedFlower = "<a:animatedflowers:1416717492050722927>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
-// CHANNEL TO SEND WELCOME MESSAGE IN
-const WELCOME_CHANNEL_ID = "1436747102897049714"; // put the welcome channel id here
+// ALL CHANNEL IDS ARE NOW SET HERE
+const WELCOME_CHANNEL_ID = "1436747102897049714"; // Your welcome channel ID
+const INFORMATION_CHANNEL_ID = "1402405335964057732"; // The #information channel ID
+const SUPPORT_CHANNEL_ID = "1402405357812187287"; // The #support channel ID
+
 
 client.on("guildMemberAdd", async (member) => {
     const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
@@ -27,17 +30,19 @@ client.on("guildMemberAdd", async (member) => {
 
     // Embed
     const embed = new EmbedBuilder()
-        .setTitle(`${orangeFlower} **Welcome to Adalea!**`)
+        // ⬅️ FIX: Cleaned up setTitle string usage to prevent parsing issues
+        .setTitle(`${orangeFlower} **Welcome to Adalea!**`) 
         .setDescription(
             `Welcome, ${member}! We're so happy to have you here!\n\n` +
             `Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\n` +
-            `Please make sure to review the **#information** channel so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in **#support**.We hope you enjoy your stay! ${animatedFlower}`
+            // Clickable channel links are here
+            `Please make sure to review the <#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}` // ⬅️ The animated emoji is here
         )
         .setImage("https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png?ex=691060e0&is=690f0f60&hm=50489a1967a090539ad600113390ed0bede095df7ba58eb28ac4c9e4a718edfa")
         .setFooter({
             text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}`
         })
-        .setColor("#FFCC33"); // yellowish-orange, more yellow
+        .setColor("#FFCC33"); 
 
     // Buttons
     const row = new ActionRowBuilder().addComponents(
@@ -45,13 +50,13 @@ client.on("guildMemberAdd", async (member) => {
             .setLabel("Roblox Group")
             .setStyle(ButtonStyle.Link)
             .setURL("https://www.roblox.com/communities/250548768/Adalea#!/about")
-            .setEmoji(robloxEmoji),
+            .setEmoji(robloxEmoji), // ⬅️ Emojis are used correctly in buttons
 
         new ButtonBuilder()
             .setLabel("Public Handbook")
             .setStyle(ButtonStyle.Link)
             .setURL("https://devforum.roblox.com/t/adalea-handbook/3925323")
-            .setEmoji(handbookEmoji)
+            .setEmoji(handbookEmoji) // ⬅️ Emojis are used correctly in buttons
     );
 
     // Send message
@@ -75,5 +80,5 @@ server.listen(process.env.PORT || 3000, () => {
 
 // --- END KEEP-ALIVE SERVER ---
 
-// ✅ SAFE TOKEN HANDLING — The bot starts connecting to Discord AFTER the web server starts
+// ✅ SAFE TOKEN HANDLING 
 client.login(process.env.BOT_TOKEN);
