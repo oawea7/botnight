@@ -13,12 +13,13 @@ const http = require('http');
 const moment = require('moment-timezone');
 
 const PREFIX = '!';
-const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
-const SPECIAL_USER_ID = "1107787991444881408"; 
+const LEADERSHIP_ROLE_ID = "1402400285674049714"; // Leadership role for self roles and test commands
+const SPECIAL_USER_ID = "1107787991444881408"; // Your special user ID
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
-let isWelcomerActive = false; // Welcomer starts OFF
+let isWelcomerActive = false; // Welcome system state starts OFF now
 
+// Custom Confirmation Emojis
 const EMOJI_ADDED = "<a:verify_checkpink:1428986926878163024>";
 const EMOJI_REMOVED = "<a:Zx_:746055996362719244>";
 
@@ -28,12 +29,13 @@ const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
-// Button/dropdown flower emojis
-const FLOWERS = ["<:bluelotus:1436877456446459974>", "<:lotus:1424840252945600632>", "<:whitelotus:1436877184781258882>"];
-
+// Welcome channels
 const WELCOME_CHANNEL_ID = "1402405984978341888"; 
 const INFORMATION_CHANNEL_ID = "1402405335964057732"; 
 const SUPPORT_CHANNEL_ID = "1402405357812187287"; 
+
+// Moderation ping role
+const MODERATION_ROLE_ID = "1402411949593202800";
 
 const client = new Client({
     intents: [
@@ -63,9 +65,9 @@ async function createRolesPanel(message) {
 
     const embed = new EmbedBuilder()
         .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
-       .setDescription(
-    "Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&1402411949593202800>."
-)
+        .setDescription(
+            `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact <@&${MODERATION_ROLE_ID}>.`
+        )
         .setImage(rolesConfig.EMBED_IMAGE)
         .setColor(rolesConfig.EMBED_COLOR);
 
@@ -74,17 +76,17 @@ async function createRolesPanel(message) {
             .setCustomId('roles_pronouns')
             .setLabel('Pronouns')
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS.pronoun.match(/\d+/) || [])[0] || null }),
+            .setEmoji({ id: "1436877456446459974" }), // <:bluelotus:>
         new ButtonBuilder()
             .setCustomId('roles_pings')
             .setLabel('Pings')
             .setStyle(ButtonStyle.Primary)
-            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS.pings.match(/\d+/) || [])[0] || null }),
+            .setEmoji({ id: "1424840252945600632" }), // <:lotus:>
         new ButtonBuilder()
             .setCustomId('roles_shifts')
             .setLabel('Shifts')
             .setStyle(ButtonStyle.Success)
-            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS.shifts.match(/\d+/) || [])[0] || null })
+            .setEmoji({ id: "1436877184781258882" }) // <:whitelotus:>
     );
 
     try {
@@ -126,7 +128,11 @@ async function sendWelcomeMessage(member, channel = null) {
             .setEmoji(handbookEmoji)
     );
 
-    await targetChannel.send({ content: `Welcome, ${member}!`, embeds: [embed], components: [row] });
+    await targetChannel.send({
+        content: `Welcome, ${member}!`,
+        embeds: [embed],
+        components: [row]
+    });
 }
 
 // --- INTERACTIONS ---
@@ -136,12 +142,12 @@ client.on('interactionCreate', async interaction => {
     if (!member) return;
 
     if (interaction.isButton()) {
-        let category, name;
+        let category, name, emoji;
         const id = interaction.customId;
 
-        if (id === "roles_pronouns") { category = rolesConfig.PRONOUN_ROLES; name = "Pronouns"; }
-        if (id === "roles_pings") { category = rolesConfig.PINGS_ROLES; name = "Pings"; }
-        if (id === "roles_shifts") { category = rolesConfig.SHIFTS_ROLES; name = "Shifts"; }
+        if (id === "roles_pronouns") { category = rolesConfig.PRONOUN_ROLES; name = "Pronouns"; emoji = "<:bluelotus:1436877456446459974>"; }
+        if (id === "roles_pings") { category = rolesConfig.PINGS_ROLES; name = "Pings"; emoji = "<:lotus:1424840252945600632>"; }
+        if (id === "roles_shifts") { category = rolesConfig.SHIFTS_ROLES; name = "Shifts"; emoji = "<:whitelotus:1436877184781258882>"; }
         if (!category) return;
 
         const options = category.map(role => 
@@ -158,11 +164,8 @@ client.on('interactionCreate', async interaction => {
             .setMaxValues(options.length)
             .addOptions(options);
 
-        // Pick random flower for this dropdown
-        const flowerEmoji = FLOWERS[Math.floor(Math.random() * FLOWERS.length)];
-
-        await interaction.reply({ 
-            content: `${flowerEmoji} **${name} Selection**`,
+        await interaction.reply({
+            content: `${emoji} **${name} Selection**`,
             components: [new ActionRowBuilder().addComponents(selectMenu)],
             ephemeral: true
         });
@@ -202,11 +205,18 @@ client.on('messageCreate', async message => {
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
+
     const hasRole = message.member?.roles.cache.has(LEADERSHIP_ROLE_ID);
     const isSpecial = message.author.id === SPECIAL_USER_ID;
 
     if (command === 'roles') {
         if (!hasRole && !isSpecial) return message.reply("You do not have permission to use this command.");
+
+        // Auto-delete the !roles command message
+        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
+            await message.delete().catch(() => {});
+        }
+
         await createRolesPanel(message);
     }
 
@@ -252,3 +262,4 @@ http.createServer((req,res)=>{res.writeHead(200);res.end('Alive');}).listen(proc
 
 // --- LOGIN ---
 client.login(process.env.BOT_TOKEN);
+
