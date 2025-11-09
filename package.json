@@ -11,4 +11,9 @@
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.43" 
   }
+  "dependencies": {
+    "discord.js": "^14.15.3", 
+    "fs-extra": "^11.2.0",  <-- Make sure this line is here
+    // ... (keep any other packages your project needs)
+  }
 }
