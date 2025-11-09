@@ -13,13 +13,12 @@ const http = require('http');
 const moment = require('moment-timezone');
 
 const PREFIX = '!';
-const LEADERSHIP_ROLE_ID = "1402400285674049714"; // Leadership role for self roles and test commands
-const SPECIAL_USER_ID = "1107787991444881408"; // Your special user ID
+const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
+const SPECIAL_USER_ID = "1107787991444881408"; 
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
-let isWelcomerActive = true; // Welcome system state
+let isWelcomerActive = false; // Welcomer starts OFF
 
-// Custom Confirmation Emojis
 const EMOJI_ADDED = "<a:verify_checkpink:1428986926878163024>";
 const EMOJI_REMOVED = "<a:Zx_:746055996362719244>";
 
@@ -29,8 +28,10 @@ const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
-// Welcome channels
-const WELCOME_CHANNEL_ID = "1436747102897049714"; 
+// Button/dropdown flower emojis
+const FLOWERS = ["<:bluelotus:1436877456446459974>", "<:lotus:1424840252945600632>", "<:whitelotus:1436877184781258882>"];
+
+const WELCOME_CHANNEL_ID = "1402405984978341888"; 
 const INFORMATION_CHANNEL_ID = "1402405335964057732"; 
 const SUPPORT_CHANNEL_ID = "1402405357812187287"; 
 
@@ -63,8 +64,7 @@ async function createRolesPanel(message) {
     const embed = new EmbedBuilder()
         .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
         .setDescription(
-            "Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the @<&1402411949593202800>. 
-"
+`Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the @<&1402411949593202800>.`
         )
         .setImage(rolesConfig.EMBED_IMAGE)
         .setColor(rolesConfig.EMBED_COLOR);
@@ -74,17 +74,17 @@ async function createRolesPanel(message) {
             .setCustomId('roles_pronouns')
             .setLabel('Pronouns')
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji({ id: rolesConfig.BUTTON_EMOJIS.pronoun.match(/\d+/)[0] }),
+            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS.pronoun.match(/\d+/) || [])[0] || null }),
         new ButtonBuilder()
             .setCustomId('roles_pings')
             .setLabel('Pings')
             .setStyle(ButtonStyle.Primary)
-            .setEmoji({ id: rolesConfig.BUTTON_EMOJIS.pings.match(/\d+/)[0] }),
+            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS.pings.match(/\d+/) || [])[0] || null }),
         new ButtonBuilder()
             .setCustomId('roles_shifts')
             .setLabel('Shifts')
             .setStyle(ButtonStyle.Success)
-            .setEmoji({ id: rolesConfig.BUTTON_EMOJIS.shifts.match(/\d+/)[0] })
+            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS.shifts.match(/\d+/) || [])[0] || null })
     );
 
     try {
@@ -126,11 +126,7 @@ async function sendWelcomeMessage(member, channel = null) {
             .setEmoji(handbookEmoji)
     );
 
-    await targetChannel.send({
-        content: `Welcome, ${member}!`,
-        embeds: [embed],
-        components: [row]
-    });
+    await targetChannel.send({ content: `Welcome, ${member}!`, embeds: [embed], components: [row] });
 }
 
 // --- INTERACTIONS ---
@@ -140,12 +136,12 @@ client.on('interactionCreate', async interaction => {
     if (!member) return;
 
     if (interaction.isButton()) {
-        let category, name, emoji;
+        let category, name;
         const id = interaction.customId;
 
-        if (id === "roles_pronouns") { category = rolesConfig.PRONOUN_ROLES; name = "Pronouns"; emoji = rolesConfig.DROPDOWN_EMOJIS.pronoun; }
-        if (id === "roles_pings") { category = rolesConfig.PINGS_ROLES; name = "Pings"; emoji = rolesConfig.DROPDOWN_EMOJIS.pings; }
-        if (id === "roles_shifts") { category = rolesConfig.SHIFTS_ROLES; name = "Shifts"; emoji = rolesConfig.DROPDOWN_EMOJIS.shifts; }
+        if (id === "roles_pronouns") { category = rolesConfig.PRONOUN_ROLES; name = "Pronouns"; }
+        if (id === "roles_pings") { category = rolesConfig.PINGS_ROLES; name = "Pings"; }
+        if (id === "roles_shifts") { category = rolesConfig.SHIFTS_ROLES; name = "Shifts"; }
         if (!category) return;
 
         const options = category.map(role => 
@@ -162,8 +158,11 @@ client.on('interactionCreate', async interaction => {
             .setMaxValues(options.length)
             .addOptions(options);
 
-        await interaction.reply({
-            content: `${emoji} **${name} Selection**`,
+        // Pick random flower for this dropdown
+        const flowerEmoji = FLOWERS[Math.floor(Math.random() * FLOWERS.length)];
+
+        await interaction.reply({ 
+            content: `${flowerEmoji} **${name} Selection**`,
             components: [new ActionRowBuilder().addComponents(selectMenu)],
             ephemeral: true
         });
@@ -203,7 +202,6 @@ client.on('messageCreate', async message => {
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
-
     const hasRole = message.member?.roles.cache.has(LEADERSHIP_ROLE_ID);
     const isSpecial = message.author.id === SPECIAL_USER_ID;
 
