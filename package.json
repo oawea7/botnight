@@ -1,7 +1,7 @@
 {
   "name": "adalea-bot",
   "version": "1.0.0",
-  "description": "Adalea Discord bot: Welcomer + Self-Roles system",
+  "description": "Discord bot for Adalea: Welcomer and Self-Roles system",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
