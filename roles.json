@@ -2,25 +2,21 @@
   "EMBED_TITLE_EMOJI": "<:flower:1424840226785988608>",
   "EMBED_IMAGE": "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png",
   "EMBED_COLOR": "#FFCC33",
-
   "BUTTON_EMOJIS": {
     "pronoun": "<:f_floweryellow:1277470638788837446>",
     "pings": "<:f_flowerred:1277470729910227006>",
     "shifts": "<:f_flowerwhite:1277471061591588915>"
   },
-
   "DROPDOWN_EMOJIS": {
     "pronoun": "<:13_lotus:1361496611292712990>",
     "pings": "<:lotus:1424840252945600632>",
     "shifts": "<:whitelotus:967528681079713813>"
   },
-
   "PRONOUN_ROLES": [
     { "label": "He/him", "roleId": "1402704897786511462" },
     { "label": "She/her", "roleId": "1402704900034527263" },
     { "label": "They/them", "roleId": "1402704902999769119" }
   ],
-
   "PINGS_ROLES": [
     { "label": "Employment", "roleId": "1403445445786734742" },
     { "label": "Development", "roleId": "1402729341544169604" },
@@ -30,7 +26,6 @@
     { "label": "Awareness", "roleId": "1403023171900280872" },
     { "label": "Chat Revive", "roleId": "1402729692112486471" }
   ],
-
   "SHIFTS_ROLES": [
     { "label": "Trainings", "roleId": "1402729335152185374" },
     { "label": "Shifts", "roleId": "1402729344052232242" }
