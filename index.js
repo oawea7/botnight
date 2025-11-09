@@ -13,17 +13,17 @@ const http = require('http');
 const moment = require('moment-timezone');
 
 const PREFIX = '!';
-const LEADERSHIP_ROLE_ID = "1402400285674049714"; // Leadership role for self roles and test commands
-const SPECIAL_USER_ID = "1107787991444881408"; // Your special user ID
+const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
+const SPECIAL_USER_ID = "1107787991444881408"; 
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
-let isWelcomerActive = false; // Welcome system state starts OFF now
+let isWelcomerActive = false; // Welcomer starts OFF
 
 // Custom Confirmation Emojis
 const EMOJI_ADDED = "<a:verify_checkpink:1428986926878163024>";
 const EMOJI_REMOVED = "<a:Zx_:746055996362719244>";
 
-// Welcome emojis (unchanged)
+// Welcome emojis
 const orangeFlower = "<:orangeflower:1436795365172052018>";
 const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
@@ -33,9 +33,6 @@ const handbookEmoji = "<:handbook:1406695333135650846>";
 const WELCOME_CHANNEL_ID = "1402405984978341888"; 
 const INFORMATION_CHANNEL_ID = "1402405335964057732"; 
 const SUPPORT_CHANNEL_ID = "1402405357812187287"; 
-
-// Moderation ping role
-const MODERATION_ROLE_ID = "1402411949593202800";
 
 const client = new Client({
     intents: [
@@ -66,7 +63,7 @@ async function createRolesPanel(message) {
     const embed = new EmbedBuilder()
         .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
         .setDescription(
-            `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact <@&${MODERATION_ROLE_ID}>.`
+            `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact <@&1402411949593202800>.`
         )
         .setImage(rolesConfig.EMBED_IMAGE)
         .setColor(rolesConfig.EMBED_COLOR);
@@ -76,21 +73,25 @@ async function createRolesPanel(message) {
             .setCustomId('roles_pronouns')
             .setLabel('Pronouns')
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji({ id: "1436877456446459974" }), // <:bluelotus:>
+            .setEmoji({ id: rolesConfig.BUTTON_EMOJIS.pronoun.match(/\d+/)[0] }),
         new ButtonBuilder()
             .setCustomId('roles_pings')
             .setLabel('Pings')
             .setStyle(ButtonStyle.Primary)
-            .setEmoji({ id: "1424840252945600632" }), // <:lotus:>
+            .setEmoji({ id: rolesConfig.BUTTON_EMOJIS.pings.match(/\d+/)[0] }),
         new ButtonBuilder()
             .setCustomId('roles_shifts')
             .setLabel('Shifts')
             .setStyle(ButtonStyle.Success)
-            .setEmoji({ id: "1436877184781258882" }) // <:whitelotus:>
+            .setEmoji({ id: rolesConfig.BUTTON_EMOJIS.shifts.match(/\d+/)[0] })
     );
 
     try {
-        await message.channel.send({ embeds: [embed], components: [row] });
+        const sentMessage = await message.channel.send({ embeds: [embed], components: [row] });
+        // Autodelete user command message if possible
+        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
+            message.delete().catch(() => {});
+        }
         console.log("[DEBUG] Roles panel sent successfully.");
     } catch (err) {
         console.error("[ERROR] Failed to send roles panel:", err);
@@ -211,13 +212,11 @@ client.on('messageCreate', async message => {
 
     if (command === 'roles') {
         if (!hasRole && !isSpecial) return message.reply("You do not have permission to use this command.");
-
-        // Auto-delete the !roles command message
-        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
-            await message.delete().catch(() => {});
-        }
-
         await createRolesPanel(message);
+        // Autodelete user command
+        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
+            message.delete().catch(() => {});
+        }
     }
 
     if (["welcomeadalea","stopwelcomeadalea","restart","testwelcome"].includes(command)) {
@@ -262,4 +261,3 @@ http.createServer((req,res)=>{res.writeHead(200);res.end('Alive');}).listen(proc
 
 // --- LOGIN ---
 client.login(process.env.BOT_TOKEN);
-
