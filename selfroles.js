@@ -12,8 +12,8 @@ const http = require('http');
 const fs = require('fs-extra');
 
 const PREFIX = '!';
-const LEADERSHIP_ROLE_ID = "1402400285674049714"; // LT+ Role
-const SPECIAL_USER_ID = "1107787991444881408";     // Specific user
+const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
+const SPECIAL_USER_ID = "1107787991444881408";     
 const ROLES_FILE = 'roles.json';
 
 let rolesConfig = {};
@@ -34,20 +34,25 @@ const client = new Client({
 async function loadRolesConfig() {
     try {
         rolesConfig = await fs.readJson(ROLES_FILE);
-        console.log("Roles configuration loaded successfully.");
+        console.log("[DEBUG] Roles configuration loaded successfully.");
+        console.log("[DEBUG] Pronouns:", rolesConfig.PRONOUN_ROLES);
+        console.log("[DEBUG] Pings:", rolesConfig.PINGS_ROLES);
+        console.log("[DEBUG] Shifts:", rolesConfig.SHIFTS_ROLES);
     } catch (error) {
-        console.error("CRITICAL ERROR: Could not load roles.json:", error.message);
+        console.error("[CRITICAL] Could not load roles.json:", error.message);
         rolesConfig = {};
     }
 }
 
 // --- Create the roles panel ---
 async function createRolesPanel(message) {
+    console.log(`[DEBUG] Creating roles panel in channel: ${message.channel.name}`);
+
     if (!rolesConfig || Object.keys(rolesConfig).length === 0) {
-        return message.channel.send("Error: Role configuration is empty.").then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        console.log("[DEBUG] rolesConfig is empty!");
+        return message.channel.send("Error: Role configuration is empty. Check console logs.").then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
 
-    // Embed
     const roleEmbed = new EmbedBuilder()
         .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
         .setDescription(
@@ -56,7 +61,6 @@ async function createRolesPanel(message) {
         .setImage(rolesConfig.EMBED_IMAGE)
         .setColor(rolesConfig.EMBED_COLOR);
 
-    // Buttons (fix emoji format for Discord.js)
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('roles_pronouns_btn')
@@ -77,9 +81,9 @@ async function createRolesPanel(message) {
 
     try {
         await message.channel.send({ embeds: [roleEmbed], components: [row] });
-        console.log(`Successfully posted roles panel to channel ${message.channel.id}`);
+        console.log(`[DEBUG] Roles panel sent successfully.`);
     } catch (error) {
-        console.error("ERROR sending roles panel:", error);
+        console.error("[ERROR] Failed to send roles panel:", error);
     }
 }
 
@@ -91,9 +95,12 @@ client.on('interactionCreate', async (interaction) => {
     const member = interaction.member;
     const customId = interaction.customId;
 
+    console.log(`[DEBUG] Interaction received: ${customId} by ${member.user.tag}`);
+
     // --- BUTTON CLICK ---
     if (interaction.isButton() && customId.startsWith('roles_')) {
         let rolesCategory, categoryName, emoji;
+
         if (customId === 'roles_pronouns_btn') {
             rolesCategory = rolesConfig.PRONOUN_ROLES;
             categoryName = "Pronouns";
@@ -109,6 +116,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         if (!rolesCategory || rolesCategory.length === 0) {
+            console.log(`[DEBUG] No roles configured for ${categoryName}`);
             return interaction.reply({ content: `No roles configured for ${categoryName}.`, ephemeral: true });
         }
 
@@ -125,6 +133,7 @@ client.on('interactionCreate', async (interaction) => {
             .setMaxValues(options.length)
             .addOptions(options);
 
+        console.log(`[DEBUG] Sending dropdown for ${categoryName}`);
         await interaction.reply({
             content: `${emoji} **${categoryName} Selection**\nSelect roles or unselect to remove.`,
             components: [new ActionRowBuilder().addComponents(selectMenu)],
@@ -140,6 +149,8 @@ client.on('interactionCreate', async (interaction) => {
         if (customId.includes('pings')) allCategoryRoles = rolesConfig.PINGS_ROLES.map(r => r.roleId);
         if (customId.includes('shifts')) allCategoryRoles = rolesConfig.SHIFTS_ROLES.map(r => r.roleId);
 
+        console.log(`[DEBUG] Dropdown selection values: ${interaction.values}`);
+
         const newRoleIds = interaction.values;
         const currentMemberRoleIds = member.roles.cache.map(r => r.id);
 
@@ -152,11 +163,11 @@ client.on('interactionCreate', async (interaction) => {
 
             if (selected && !hasRole) {
                 try { await member.roles.add(roleId); addedRoles.push(`${EMOJI_ADDED} <@&${roleId}>`); } 
-                catch (e) { console.error(`Failed to add role ${roleId}:`, e); }
+                catch (e) { console.error(`[ERROR] Failed to add role ${roleId}:`, e); }
             }
             if (!selected && hasRole) {
                 try { await member.roles.remove(roleId); removedRoles.push(`${EMOJI_REMOVED} <@&${roleId}>`); } 
-                catch (e) { console.error(`Failed to remove role ${roleId}:`, e); }
+                catch (e) { console.error(`[ERROR] Failed to remove role ${roleId}:`, e); }
             }
         }
 
@@ -165,6 +176,7 @@ client.on('interactionCreate', async (interaction) => {
         if (removedRoles.length) response += `\nRemoved: ${removedRoles.join(' ')}`;
         if (!addedRoles.length && !removedRoles.length) response = "No changes made.";
 
+        console.log(`[DEBUG] Roles updated for ${member.user.tag}`);
         await interaction.update({ content: response, components: [], ephemeral: true });
     }
 });
@@ -175,13 +187,17 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
 
+    console.log(`[DEBUG] Command received: ${command} from ${message.author.tag}`);
+
     const hasLeadershipRole = message.member?.roles?.cache.has(LEADERSHIP_ROLE_ID);
     const isSpecialUser = message.author.id === SPECIAL_USER_ID;
 
     if (command === 'roles') {
-        if (!hasLeadershipRole && !isSpecialUser) return message.reply("You do not have permission to use this command.");
+        if (!hasLeadershipRole && !isSpecialUser) {
+            console.log(`[DEBUG] User ${message.author.tag} does not have permission`);
+            return message.reply("You do not have permission to use this command.");
+        }
 
-        // Delete after 2 seconds
         if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
             setTimeout(() => message.delete().catch(() => {}), 2000);
         }
@@ -196,7 +212,7 @@ client.once('ready', async () => {
     await loadRolesConfig();
 });
 
-// --- KEEP-ALIVE SERVER ---
+// --- KEEP-ALIVE ---
 const server = http.createServer((req, res) => {
     res.writeHead(200);
     res.end('Bot is alive!');
@@ -204,3 +220,4 @@ const server = http.createServer((req, res) => {
 server.listen(process.env.PORT || 3000, () => console.log(`Server listening on port ${process.env.PORT || 3000}`));
 
 client.login(process.env.BOT_TOKEN);
+
