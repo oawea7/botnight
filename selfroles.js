@@ -1,6 +1,3 @@
-if (command === 'roles') {
-    console.log(`[DEBUG] !roles command triggered by ${message.author.tag}`);
-
-    // Temporarily bypass permission check
-    await createRolesPanel(message);
-}
+client.on('messageCreate', message => {
+    console.log(`[DEBUG] Message received from ${message.author.tag} in ${message.channel.name}: ${message.content}`);
+});
