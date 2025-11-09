@@ -63,9 +63,9 @@ async function createRolesPanel(message) {
 
     const embed = new EmbedBuilder()
         .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
-        .setDescription(
-`Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the @<&1402411949593202800>.`
-        )
+       .setDescription(
+    "Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&1402411949593202800>."
+)
         .setImage(rolesConfig.EMBED_IMAGE)
         .setColor(rolesConfig.EMBED_COLOR);
 
