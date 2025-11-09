@@ -1,3 +1,4 @@
+// index.js
 const { 
     Client, 
     GatewayIntentBits, 
@@ -9,31 +10,33 @@ const {
     StringSelectMenuOptionBuilder 
 } = require('discord.js');
 const fs = require('fs-extra');
-const http = require('http');
 const moment = require('moment-timezone');
+const http = require('http');
 
+// --- CONFIGURATION ---
 const PREFIX = '!';
 const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
 const SPECIAL_USER_ID = "1107787991444881408";     
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
 
+let isWelcomerActive = true; // Toggle for !welcomeadalea / !stopwelcomeadalea
+
+// Custom confirmation emojis
 const EMOJI_ADDED = "<a:verify_checkpink:1428986926878163024>";
 const EMOJI_REMOVED = "<a:Zx_:746055996362719244>";
 
-let isWelcomerActive = true;
-
-// CHANNEL IDS
+// --- CHANNELS AND EMOJIS ---
 const WELCOME_CHANNEL_ID = "1436747102897049714";
 const INFORMATION_CHANNEL_ID = "1402405335964057732";
 const SUPPORT_CHANNEL_ID = "1402405357812187287";
 
-// Emojis
 const orangeFlower = "<:orangeflower:1436795365172052018>";
 const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
+// --- CLIENT ---
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -43,21 +46,56 @@ const client = new Client({
     ]
 });
 
-// --- Load roles.json ---
+// --- LOAD ROLES JSON ---
 async function loadRolesConfig() {
     try {
         rolesConfig = await fs.readJson(ROLES_FILE);
-        console.log("[DEBUG] Roles loaded.");
+        console.log("[DEBUG] Roles loaded successfully.");
     } catch (err) {
         console.error("[ERROR] Failed to load roles.json:", err);
         rolesConfig = {};
     }
 }
 
-// --- Create Roles Panel ---
+// --- WELCOME MESSAGE FUNCTION ---
+async function sendWelcomeMessage(member) {
+    if (!isWelcomerActive) return;
+    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+    if (!channel) return;
+
+    const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${orangeFlower} **Welcome to Adalea!**`) 
+        .setDescription(
+            `Welcome, ${member}! We're so happy to have you here!\n\n` +
+            `Adalea is a tropical-inspired restaurant experience on Roblox.\n\n` +
+            `Please check <#${INFORMATION_CHANNEL_ID}> for guidelines. Open a ticket in <#${SUPPORT_CHANNEL_ID}> if needed. ${animatedFlower}`
+        )
+        .setImage("https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png")
+        .setFooter({ text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}` })
+        .setColor("#FFCC33");
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setLabel("Roblox Group")
+            .setStyle(ButtonStyle.Link)
+            .setURL("https://www.roblox.com/communities/250548768/Adalea#!/about")
+            .setEmoji(robloxEmoji), 
+        new ButtonBuilder()
+            .setLabel("Public Handbook")
+            .setStyle(ButtonStyle.Link)
+            .setURL("https://devforum.roblox.com/t/adalea-handbook/3925323")
+            .setEmoji(handbookEmoji) 
+    );
+
+    channel.send({ content: `Welcome, ${member}!`, embeds: [embed], components: [row] });
+}
+
+// --- SELF-ROLES PANEL ---
 async function createRolesPanel(message) {
     if (!rolesConfig || Object.keys(rolesConfig).length === 0) {
-        return message.channel.send("Error: roles.json is empty! Check console logs.");
+        return message.channel.send("Error: roles.json is empty!").catch(() => {});
     }
 
     const embed = new EmbedBuilder()
@@ -84,70 +122,29 @@ async function createRolesPanel(message) {
             .setEmoji({ id: rolesConfig.BUTTON_EMOJIS.shifts.match(/\d+/)[0] })
     );
 
-    await message.channel.send({ embeds: [embed], components: [row] });
+    await message.channel.send({ embeds: [embed], components: [row] }).catch(console.error);
 }
 
-// --- Welcome Message ---
-async function sendWelcomeMessage(member) {
-    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-    if (!channel) return;
-
-    const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
-
-    const embed = new EmbedBuilder()
-        .setTitle(`${orangeFlower} **Welcome to Adalea!**`) 
-        .setDescription(
-            `Welcome, ${member}! We're so happy to have you here!\n\n` +
-            `Adalea is a tropical-inspired restaurant experience on Roblox.\n` +
-            `Review <#${INFORMATION_CHANNEL_ID}> and open a ticket in <#${SUPPORT_CHANNEL_ID}> if needed. ${animatedFlower}`
-        )
-        .setImage("https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png")
-        .setFooter({ text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}` })
-        .setColor("#FFCC33");
-
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setLabel("Roblox Group")
-            .setStyle(ButtonStyle.Link)
-            .setURL("https://www.roblox.com/communities/250548768/Adalea#!/about")
-            .setEmoji(robloxEmoji),
-        new ButtonBuilder()
-            .setLabel("Public Handbook")
-            .setStyle(ButtonStyle.Link)
-            .setURL("https://devforum.roblox.com/t/adalea-handbook/3925323")
-            .setEmoji(handbookEmoji)
-    );
-
-    channel.send({ content: `Welcome, ${member}!`, embeds: [embed], components: [row] });
-}
-
-// --- Event Handlers ---
-
-client.on("guildMemberAdd", member => {
-    if (isWelcomerActive) sendWelcomeMessage(member);
-});
-
+// --- INTERACTION HANDLER ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.inGuild()) return;
     const member = interaction.member;
     if (!member) return;
 
-    // --- BUTTONS ---
+    // Button click → show dropdown
     if (interaction.isButton()) {
-        const id = interaction.customId;
-        let category = null, emoji = "", name = "";
+        let category = null, name = "", emoji = "";
 
-        if (id === "roles_pronouns") { category = rolesConfig.PRONOUN_ROLES; name = "Pronouns"; emoji = rolesConfig.DROPDOWN_EMOJIS.pronoun; }
-        if (id === "roles_pings") { category = rolesConfig.PINGS_ROLES; name = "Pings"; emoji = rolesConfig.DROPDOWN_EMOJIS.pings; }
-        if (id === "roles_shifts") { category = rolesConfig.SHIFTS_ROLES; name = "Shifts"; emoji = rolesConfig.DROPDOWN_EMOJIS.shifts; }
+        if (interaction.customId === "roles_pronouns") { category = rolesConfig.PRONOUN_ROLES; name="Pronouns"; emoji=rolesConfig.DROPDOWN_EMOJIS.pronoun; }
+        if (interaction.customId === "roles_pings") { category = rolesConfig.PINGS_ROLES; name="Pings"; emoji=rolesConfig.DROPDOWN_EMOJIS.pings; }
+        if (interaction.customId === "roles_shifts") { category = rolesConfig.SHIFTS_ROLES; name="Shifts"; emoji=rolesConfig.DROPDOWN_EMOJIS.shifts; }
 
         if (!category) return;
 
-        const options = category.map(role => 
-            new StringSelectMenuOptionBuilder()
-                .setLabel(role.label)
-                .setValue(role.roleId)
-                .setDefault(member.roles.cache.has(role.roleId))
+        const options = category.map(r => new StringSelectMenuOptionBuilder()
+            .setLabel(r.label)
+            .setValue(r.roleId)
+            .setDefault(member.roles.cache.has(r.roleId))
         );
 
         const selectMenu = new StringSelectMenuBuilder()
@@ -160,23 +157,20 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `${emoji} **${name} Selection**`, components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
     }
 
-    // --- DROPDOWNS ---
+    // Dropdown select → assign/remove roles
     if (interaction.isStringSelectMenu()) {
         let allRoles = [];
-        const selectId = interaction.customId;
-        if (selectId.includes("pronouns")) allRoles = rolesConfig.PRONOUN_ROLES.map(r => r.roleId);
-        if (selectId.includes("pings")) allRoles = rolesConfig.PINGS_ROLES.map(r => r.roleId);
-        if (selectId.includes("shifts")) allRoles = rolesConfig.SHIFTS_ROLES.map(r => r.roleId);
+        if (interaction.customId.includes("pronouns")) allRoles = rolesConfig.PRONOUN_ROLES.map(r => r.roleId);
+        if (interaction.customId.includes("pings")) allRoles = rolesConfig.PINGS_ROLES.map(r => r.roleId);
+        if (interaction.customId.includes("shifts")) allRoles = rolesConfig.SHIFTS_ROLES.map(r => r.roleId);
 
         const newRoles = interaction.values;
         const currentRoles = member.roles.cache.map(r => r.id);
-
         const added = [], removed = [];
+
         for (const roleId of allRoles) {
-            const hasRole = currentRoles.includes(roleId);
-            const selected = newRoles.includes(roleId);
-            if (selected && !hasRole) { try { await member.roles.add(roleId); added.push(`${EMOJI_ADDED} <@&${roleId}>`); } catch(e){console.error(e);} }
-            if (!selected && hasRole) { try { await member.roles.remove(roleId); removed.push(`${EMOJI_REMOVED} <@&${roleId}>`); } catch(e){console.error(e);} }
+            if (newRoles.includes(roleId) && !currentRoles.includes(roleId)) { await member.roles.add(roleId).catch(console.error); added.push(`${EMOJI_ADDED} <@&${roleId}>`); }
+            if (!newRoles.includes(roleId) && currentRoles.includes(roleId)) { await member.roles.remove(roleId).catch(console.error); removed.push(`${EMOJI_REMOVED} <@&${roleId}>`); }
         }
 
         let response = "Your roles have been updated!";
@@ -188,29 +182,47 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- Command handler ---
+// --- COMMAND HANDLER ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
 
-    const hasRole = message.member?.roles.cache.has(LEADERSHIP_ROLE_ID);
-    const isSpecial = message.author.id === SPECIAL_USER_ID;
+    const hasLeadershipRole = message.member?.roles.cache.has(LEADERSHIP_ROLE_ID);
+    const isSpecialUser = message.author.id === SPECIAL_USER_ID;
 
     if (command === 'roles') {
-        if (!hasRole && !isSpecial) return message.reply("You do not have permission to use this command.");
+        if (!hasLeadershipRole && !isSpecialUser) return message.reply("You do not have permission to use this command.");
         await createRolesPanel(message);
+    }
+
+    if (command === 'welcomeadalea') {
+        if (!hasLeadershipRole && !isSpecialUser) return message.reply("You do not have permission to use this command.");
+        if (isWelcomerActive) return message.reply("Welcomer is already active.");
+        isWelcomerActive = true;
+        message.reply("Welcomer activated.");
+    }
+
+    if (command === 'stopwelcomeadalea') {
+        if (!hasLeadershipRole && !isSpecialUser) return message.reply("You do not have permission to use this command.");
+        if (!isWelcomerActive) return message.reply("Welcomer is already inactive.");
+        isWelcomerActive = false;
+        message.reply("Welcomer deactivated.");
     }
 });
 
-// --- Ready & keep-alive ---
+// --- MEMBER JOIN EVENT ---
+client.on('guildMemberAdd', sendWelcomeMessage);
+
+// --- BOT STARTUP ---
 client.once('ready', async () => {
     console.log(`Bot online as ${client.user.tag}`);
     await loadRolesConfig();
 });
 
+// --- KEEP-ALIVE SERVER ---
 http.createServer((req,res)=>{res.writeHead(200);res.end('Alive');}).listen(process.env.PORT||3000);
+
+// --- LOGIN ---
 client.login(process.env.BOT_TOKEN);
-
-
