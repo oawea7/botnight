@@ -17,9 +17,9 @@ const LEADERSHIP_ROLE_ID = "1402400285674049714";
 const SPECIAL_USER_ID = "1107787991444881408"; 
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
-let isWelcomerActive = false; // Welcomer starts OFF
+let isWelcomerActive = false; // Will start only with command
 
-// Custom Confirmation Emojis
+// Confirmation Emojis
 const EMOJI_ADDED = "<a:verify_checkpink:1428986926878163024>";
 const EMOJI_REMOVED = "<a:Zx_:746055996362719244>";
 
@@ -43,7 +43,7 @@ const client = new Client({
     ]
 });
 
-// --- LOAD roles.json ---
+// --- Load roles.json ---
 async function loadRolesConfig() {
     try {
         rolesConfig = await fs.readJson(ROLES_FILE);
@@ -54,16 +54,16 @@ async function loadRolesConfig() {
     }
 }
 
-// --- ROLES PANEL ---
+// --- Roles panel ---
 async function createRolesPanel(message) {
     if (!rolesConfig || Object.keys(rolesConfig).length === 0) {
-        return message.channel.send("Error: roles.json is empty! Check console logs.");
+        return message.channel.send("Error: roles.json is empty!").then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
 
     const embed = new EmbedBuilder()
         .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
         .setDescription(
-            `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact <@&1402411949593202800>.`
+            `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Shifts), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&1402411949593202800>.`
         )
         .setImage(rolesConfig.EMBED_IMAGE)
         .setColor(rolesConfig.EMBED_COLOR);
@@ -87,23 +87,21 @@ async function createRolesPanel(message) {
     );
 
     try {
-        const sentMessage = await message.channel.send({ embeds: [embed], components: [row] });
-        // Autodelete user command message if possible
-        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
-            message.delete().catch(() => {});
-        }
+        await message.channel.send({ embeds: [embed], components: [row] });
         console.log("[DEBUG] Roles panel sent successfully.");
     } catch (err) {
         console.error("[ERROR] Failed to send roles panel:", err);
     }
 }
 
-// --- WELCOME MESSAGE ---
+// --- Welcome message ---
 async function sendWelcomeMessage(member, channel = null) {
     const targetChannel = channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
     if (!targetChannel) return;
 
     const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
+
+    await targetChannel.send(`Welcome, ${member}!`);
 
     const embed = new EmbedBuilder()
         .setTitle(`${orangeFlower} **Welcome to Adalea!**`)
@@ -130,13 +128,12 @@ async function sendWelcomeMessage(member, channel = null) {
     );
 
     await targetChannel.send({
-        content: `Welcome, ${member}!`,
         embeds: [embed],
         components: [row]
     });
 }
 
-// --- INTERACTIONS ---
+// --- Interactions ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.inGuild()) return;
     const member = interaction.member;
@@ -199,10 +196,9 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- COMMANDS ---
+// --- Commands ---
 client.on('messageCreate', async message => {
-    if (message.author.bot) return;
-    if (!message.content.startsWith(PREFIX)) return;
+    if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
@@ -210,54 +206,50 @@ client.on('messageCreate', async message => {
     const hasRole = message.member?.roles.cache.has(LEADERSHIP_ROLE_ID);
     const isSpecial = message.author.id === SPECIAL_USER_ID;
 
-    if (command === 'roles') {
-        if (!hasRole && !isSpecial) return message.reply("You do not have permission to use this command.");
-        await createRolesPanel(message);
-        // Autodelete user command
-        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
-            message.delete().catch(() => {});
-        }
+    if (!hasRole && !isSpecial && ["roles","welcomeadalea","stopwelcomeadalea","testwelcome","restart"].includes(command)) {
+        return message.reply("You do not have permission to use this command.").then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
     }
 
-    if (["welcomeadalea","stopwelcomeadalea","restart","testwelcome"].includes(command)) {
-        if (!hasRole && !isSpecial) return message.reply("You do not have permission to use this command.");
+    // Auto-delete user command message after 5 seconds
+    message.delete().catch(() => {});
 
-        if (command === "welcomeadalea") {
-            if (isWelcomerActive) return message.channel.send(`${orangeFlower} **Welcomer is already active.**`);
-            isWelcomerActive = true;
-            return message.channel.send(`${orangeFlower} **Starting... Welcomer activated.**`);
-        }
+    if (command === 'roles') await createRolesPanel(message);
 
-        if (command === "stopwelcomeadalea") {
-            if (!isWelcomerActive) return message.channel.send(`${orangeFlower} **Welcomer is already inactive.**`);
-            isWelcomerActive = false;
-            return message.channel.send(`${orangeFlower} **Stopping... Welcomer deactivated.**`);
-        }
+    if (command === "welcomeadalea") {
+        if (isWelcomerActive) return message.channel.send(`${orangeFlower} **Welcomer is already active.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+        isWelcomerActive = true;
+        return message.channel.send(`${orangeFlower} **Starting... Welcomer activated.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+    }
 
-        if (command === "testwelcome") {
-            return sendWelcomeMessage(message.member, message.channel);
-        }
+    if (command === "stopwelcomeadalea") {
+        if (!isWelcomerActive) return message.channel.send(`${orangeFlower} **Welcomer is already inactive.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+        isWelcomerActive = false;
+        return message.channel.send(`${orangeFlower} **Stopping... Welcomer deactivated.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+    }
 
-        if (command === "restart") {
-            await message.channel.send("Restarting... please stay on stand by");
-            process.exit(1);
-        }
+    if (command === "testwelcome") {
+        return sendWelcomeMessage(message.member, message.channel);
+    }
+
+    if (command === "restart") {
+        await message.channel.send("Restarting... please stay on stand by").then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+        process.exit(1);
     }
 });
 
-// --- MEMBER JOIN ---
+// --- Member join ---
 client.on("guildMemberAdd", async member => {
     if (isWelcomerActive) sendWelcomeMessage(member);
 });
 
-// --- READY ---
+// --- Ready ---
 client.once('ready', async () => {
     console.log(`Bot online as ${client.user.tag}`);
     await loadRolesConfig();
 });
 
-// --- KEEP-ALIVE ---
+// --- Keep-alive ---
 http.createServer((req,res)=>{res.writeHead(200);res.end('Alive');}).listen(process.env.PORT||3000);
 
-// --- LOGIN ---
+// --- Login ---
 client.login(process.env.BOT_TOKEN);
