@@ -13,7 +13,8 @@ const http = require('http');
 const moment = require('moment-timezone');
 
 const PREFIX = '!';
-const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
+// --- UPDATED LEADERSHIP ROLE ID ---
+const LEADERSHIP_ROLE_ID = "1402400285674049576"; // Corrected ID per your request
 const SPECIAL_USER_ID = "1107787991444881408"; 
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
@@ -230,32 +231,45 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- COMMANDS ---
+// --- COMMANDS (FIXED PERMISSION LOGIC) ---
 client.on('messageCreate', async message => {
-    if (message.author.bot || !message.content.startsWith(PREFIX)) return;
+    // 1. Basic checks (Ensure member object exists)
+    if (message.author.bot || !message.content.startsWith(PREFIX) || !message.member) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
 
-    const hasRole = message.member?.roles.cache.has(LEADERSHIP_ROLE_ID);
+    // 2. Permission Check Preparation
+    const hasRole = message.member.roles.cache.has(LEADERSHIP_ROLE_ID);
     const isSpecial = message.author.id === SPECIAL_USER_ID;
+    const isAuthorized = hasRole || isSpecial;
 
-    // Permission check for listed commands
-    if (!hasRole && !isSpecial && ["roles","welcomeadalea","stopwelcomeadalea","testwelcome","restart"].includes(command)) {
-        return message.reply("You do not have permission to use this command.").then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+    // 3. Define commands that require authorization
+    const authorizedCommands = ["roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart"];
+
+    // 4. Permission Check & Handle Unauthorized Access (Crucial Fix)
+    if (authorizedCommands.includes(command) && !isAuthorized) {
+        // Send the permission error message
+        const reply = await message.reply("You do not have permission to use this command.");
+        // Delete the error message after 5 seconds
+        setTimeout(() => reply.delete().catch(() => {}), 5000);
+        return; // Stop execution immediately for unauthorized users
     }
 
-    // Auto-delete the user command message after 5 seconds (preserve behavior)
-    // Note: attempt immediate delete then fallback to timed delete if bot lacks ManageMessages
+    // 5. Delete the User's Command Message (Only runs if authorized or command doesn't require auth)
     try {
         if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
+            // Delete the user's command message immediately 
             await message.delete().catch(() => {});
         } else {
+            // Fallback for timed delete if bot lacks ManageMessages permission
             setTimeout(() => message.delete().catch(() => {}), 5000);
         }
     } catch (e) {
-        // ignore
+        // ignore deletion errors
     }
+
+    // --- Command Execution ---
 
     if (command === 'roles') {
         await createRolesPanel(message);
@@ -281,7 +295,8 @@ client.on('messageCreate', async message => {
     }
 
     if (command === "restart") {
-        await message.channel.send("Restarting... please stay on stand by").then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+        const sentMsg = await message.channel.send("Restarting... please stay on stand by");
+        setTimeout(() => sentMsg.delete().catch(() => {}), 5000); 
         process.exit(1);
     }
 });
