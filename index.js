@@ -23,7 +23,7 @@ const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore');
 const PREFIX = '!';
 
 // --- CONFIGURATION ---
-const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Channel for the thank you embed and TTS announcement fallback
+const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Channel for the thank you embed and announcement
 const SERVER_BOOSTER_ROLE_ID = "1404242033849270272"; // The Server Booster role ID
 const SERVER_LOUNGE_CHANNEL_ID = "1414381377389858908"; // Channel for the welcome message
 
@@ -33,10 +33,7 @@ const SPECIAL_USER_ID = "1107787991444881408";
 
 // --- BOOST DETECTOR CONFIGURATION ---
 const BOOST_OUTPUT_CHANNEL_ID = COMMUNITY_CHANNEL_ID; 
-const TTS_VOICE_NAME = 'Fenrir'; // Excitable voice for the announcement
-// Gemini API Configuration (used for TTS)
-const API_KEY = ""; // Placeholder, key is provided by Canvas environment at runtime
-const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+// Removed TTS_VOICE_NAME and Gemini API key config
 // --- END BOOST DETECTOR CONFIGURATION ---
 
 const ROLES_FILE = 'roles.json';
@@ -116,122 +113,14 @@ async function setBoostState(status) {
     }
 }
 
-// --- TTS Utility Functions ---
+// --- TTS Utility Functions (REMOVED: Now a simple text announcement) ---
 
-/** Converts a base64 string to an ArrayBuffer. */
-function base64ToArrayBuffer(base64) {
-    const binaryString = Buffer.from(base64, 'base64').toString('binary');
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-/** Converts PCM 16-bit audio data to a WAV Buffer. */
-function pcmToWav(pcm16, sampleRate) {
-    const numChannels = 1;
-    const numSamples = pcm16.length;
-    const byteRate = sampleRate * numChannels * 2; 
-
-    const buffer = Buffer.alloc(44 + numSamples * 2);
-    const view = new DataView(buffer.buffer);
-
-    // Write WAV header
-    view.setUint32(0, 0x52494646, false); // "RIFF"
-    view.setUint32(4, 36 + numSamples * 2, true); // Chunk size
-    view.setUint32(8, 0x57415645, false); // "WAVE"
-    view.setUint32(12, 0x666d7420, false); // "fmt "
-    view.setUint32(16, 16, true); // Sub-chunk 1 size (16 for PCM)
-    view.setUint16(20, 1, true); // Audio format (1 for PCM)
-    view.setUint16(22, numChannels, true); // Number of channels
-    view.setUint32(24, sampleRate, true); // Sample rate
-    view.setUint32(28, byteRate, true); // Byte rate
-    view.setUint16(32, numChannels * 2, true); // Block align
-    view.setUint16(34, 16, true); // Bits per sample
-    view.setUint32(36, 0x64617461, false); // "data"
-    view.setUint32(40, numSamples * 2, true); // Sub-chunk 2 size
-
-    // Write PCM data
-    let offset = 44;
-    for (let i = 0; i < numSamples; i++) {
-        view.setInt16(offset, pcm16[i], true); // Write little-endian
-        offset += 2;
-    }
-
-    return buffer; // Return Node.js Buffer
-}
-
-/** Calls the Gemini TTS API and sends the resulting audio as a file. */
+/** Announces the boost using a standard text message. */
 async function announceBoost(textToSpeak, client) {
-    console.log(`TTS Request: ${textToSpeak}`);
-    const payload = {
-        contents: [{
-            parts: [{ text: textToSpeak }]
-        }],
-        generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-                voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: TTS_VOICE_NAME }
-                }
-            }
-        },
-        model: "gemini-2.5-flash-preview-tts"
-    };
-
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-            const response = await fetch(TTS_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                throw new Error(`API returned status ${response.status}`);
-            }
-
-            const result = await response.json();
-            const part = result?.candidates?.[0]?.content?.parts?.[0];
-            const audioData = part?.inlineData?.data;
-            const mimeType = part?.inlineData?.mimeType;
-
-            if (audioData && mimeType && mimeType.startsWith("audio/")) {
-                const sampleRateMatch = mimeType.match(/rate=(\d+)/);
-                const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000; 
-
-                const pcmData = base64ToArrayBuffer(audioData);
-                const pcm16 = new Int16Array(pcmData);
-                const wavBuffer = pcmToWav(pcm16, sampleRate);
-
-                // Send the audio file to the Discord channel
-                const channel = client.channels.cache.get(BOOST_OUTPUT_CHANNEL_ID);
-                if (channel && channel.type === ChannelType.GuildText) {
-                    await channel.send({
-                        content: `**TTS Announcement:** ${orangeFlower}`,
-                        files: [{ attachment: wavBuffer, name: 'boost_announcement.wav' }]
-                    });
-                }
-                return; // Success, exit the retry loop
-            } else {
-                throw new Error("TTS API response missing audio data.");
-            }
-        } catch (error) {
-            console.warn(`TTS API call attempt ${attempt} failed: ${error.message}`);
-            if (attempt < 3) {
-                const delay = Math.pow(2, attempt) * 1000; 
-                await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-                console.error("All TTS API attempts failed. Skipping audio announcement.");
-                const channel = client.channels.cache.get(BOOST_OUTPUT_CHANNEL_ID);
-                if (channel && channel.type === ChannelType.GuildText) {
-                    // Using EMOJI_REMOVED for failure fallback
-                    channel.send(`${EMOJI_REMOVED} **Boost Announcement Failed** (Text fallback used).`);
-                }
-            }
-        }
+    console.log(`Boost Text Announcement: ${textToSpeak}`);
+    const channel = client.channels.cache.get(BOOST_OUTPUT_CHANNEL_ID);
+    if (channel && channel.type === ChannelType.GuildText) {
+        await channel.send(`📢 **BOOST ANNOUNCEMENT:** ${textToSpeak}`).catch(console.error);
     }
 }
 // --- END FIREBASE/TTS UTILITY FUNCTIONS ---
@@ -273,7 +162,6 @@ async function handleBoosterStatusChange(oldMember, newMember) {
 
     if (!boosterRole || !communityChannel || !loungeChannel) {
         console.error("[ERROR] Booster config missing (role/channels).");
-        // We still continue to handle the status change even if some channels/roles are missing
     }
 
     const isBoosting = newMember.premiumSince;
@@ -284,10 +172,10 @@ async function handleBoosterStatusChange(oldMember, newMember) {
         try {
             if (boosterRole) await newMember.roles.add(boosterRole, "Server Booster: Started/Re-started boosting.");
             
-            // 1. ANNOUNCE VIA TTS/TEXT IF DETECTOR IS RUNNING
+            // 1. ANNOUNCE VIA TEXT IF DETECTOR IS RUNNING (TTS replaced with simple text)
             if (boostDetectorIsRunning) {
                 const boostCount = newMember.guild.premiumSubscriptionCount;
-                const text = `Attention, ${newMember.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${newMember.user.username}!`;
+                const text = `${newMember.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${newMember.user.username}!`;
                 
                 await announceBoost(text, client); 
             }
@@ -525,13 +413,9 @@ client.on('messageCreate', async message => {
     // 4. Permission Check & Handle Unauthorized Access
     if (authorizedCommands.includes(command) && !isAuthorized) {
         const reply = await message.reply("You do not have permission to use this command.");
-        // We still use cleanup here, but only for the reply/command message.
         cleanupAndExit(reply, message);
         return; 
     }
-
-    // NOTE: The message deletion block (Step 5) was removed here to fix command execution.
-    // Cleanup is now handled at the end of each authorized command's successful execution.
 
     // --- Command Execution ---
 
@@ -582,7 +466,7 @@ client.on('messageCreate', async message => {
         process.exit(1);
     }
     
-    // --- BOOST DETECTOR COMMANDS (FIXED) ---
+    // --- BOOST DETECTOR COMMANDS (TTS Removed) ---
     if (command === 'startboosts') {
         let replyMsg;
         if (boostDetectorIsRunning) {
@@ -623,7 +507,7 @@ client.on("guildMemberAdd", async member => {
     if (isWelcomerActive) sendWelcomeMessage(member);
 });
 
-// --- MEMBER UPDATE (BOOSTER LOGIC - FIXED CHECK) ---
+// --- MEMBER UPDATE (BOOSTER LOGIC) ---
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
     // Check only for a change in premiumSince, which correctly signals a boost start/end.
     if (oldMember.premiumSince !== newMember.premiumSince) 
