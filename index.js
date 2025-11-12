@@ -7,7 +7,8 @@ const {
     ButtonStyle, 
     StringSelectMenuBuilder, 
     StringSelectMenuOptionBuilder,
-    ChannelType 
+    ChannelType,
+    ApplicationCommandOptionType 
 } = require('discord.js');
 const fs = require('fs-extra');
 const http = require('http');
@@ -26,6 +27,8 @@ const PREFIX = '!';
 const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Channel for the thank you embed and announcement
 const SERVER_BOOSTER_ROLE_ID = "1404242033849270272"; // The Server Booster role ID
 const SERVER_LOUNGE_CHANNEL_ID = "1414381377389858908"; // Channel for the welcome message
+// UPDATED GUILD ID
+const GUILD_ID = "1402400197040013322"; 
 
 // --- LEADERSHIP/CONTROL CONFIG ---
 const LEADERSHIP_ROLE_ID = "1402400285674049576"; 
@@ -233,12 +236,83 @@ async function handleBoosterStatusChange(oldMember, newMember) {
     }
 }
 
+// --- INTERACTION HANDLER (SLASH COMMANDS, BUTTONS, SELECT MENUS) ---
 client.on('interactionCreate', async interaction => {
-    // ... Roles Panel and Interaction logic remains unchanged ...
     if (!interaction.inGuild()) return;
     const member = interaction.member;
     if (!member) return;
 
+    const hasRole = member.roles.cache.has(LEADERSHIP_ROLE_ID);
+    const isSpecial = member.user.id === SPECIAL_USER_ID;
+    const isAuthorized = hasRole || isSpecial;
+
+    // --- SLASH COMMAND HANDLER ---
+    if (interaction.isCommand()) {
+        if (interaction.commandName === 'delete') {
+            if (!isAuthorized) {
+                return await interaction.reply({ 
+                    content: "You do not have permission to use this command.", 
+                    ephemeral: true 
+                });
+            }
+
+            const messageLink = interaction.options.getString('message_link');
+            if (!messageLink) {
+                return await interaction.reply({ 
+                    content: "Please provide a valid message link.", 
+                    ephemeral: true 
+                });
+            }
+
+            // Regex to extract guildId, channelId, and messageId from the link
+            const match = messageLink.match(/\/(\d+)\/(\d+)\/(\d+)$/);
+            if (!match) {
+                return await interaction.reply({ 
+                    content: "Invalid message link format. Ensure it looks like: `https://discord.com/channels/GUILD_ID/CHANNEL_ID/MESSAGE_ID`", 
+                    ephemeral: true 
+                });
+            }
+
+            // NOTE: match[1] is the Guild ID, match[2] is the Channel ID, match[3] is the Message ID
+            const [, guildId, channelId, messageId] = match;
+
+            if (guildId !== interaction.guildId) {
+                return await interaction.reply({ 
+                    content: "The message link is for a different server.", 
+                    ephemeral: true 
+                });
+            }
+
+            try {
+                const channel = interaction.guild.channels.cache.get(channelId);
+                if (!channel || channel.type !== ChannelType.GuildText) {
+                    return await interaction.reply({ 
+                        content: "Could not find the text channel for that message.", 
+                        ephemeral: true 
+                    });
+                }
+
+                const messageToDelete = await channel.messages.fetch(messageId);
+                await messageToDelete.delete();
+
+                await interaction.reply({ 
+                    content: "Message deleted!", 
+                    ephemeral: true 
+                });
+
+            } catch (error) {
+                console.error(`Error deleting message: ${error.message}`);
+                await interaction.reply({ 
+                    content: `Failed to delete message. Error: ${error.message.substring(0, 100)}`, 
+                    ephemeral: true 
+                });
+            }
+            return;
+        }
+    }
+    // --- END SLASH COMMAND HANDLER ---
+
+    // --- COMPONENT HANDLER (Buttons/Select Menus) ---
     if (interaction.isButton()) {
         let category, name, emoji;
         const id = interaction.customId;
@@ -310,6 +384,8 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// --- WELCOME/HELPER FUNCTIONS ---
+
 async function sendWelcomeMessage(member, channel = null) {
     const targetChannel = channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
     if (!targetChannel) return;
@@ -360,7 +436,7 @@ const cleanupAndExit = async (botMessage, userMessage) => {
     }
 };
 
-// --- COMMANDS ---
+// --- PREFIX COMMANDS ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith(PREFIX) || !message.member) return;
 
@@ -436,7 +512,7 @@ client.on('messageCreate', async message => {
         } else {
             try {
                 await setBoostState(true); 
-                boostDetectorIsRunning = true; // IMMEDIATE LOCAL UPDATE FIX
+                boostDetectorIsRunning = true; 
                 replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !startboost:", e);
@@ -454,7 +530,7 @@ client.on('messageCreate', async message => {
         } else {
             try {
                 await setBoostState(false); 
-                boostDetectorIsRunning = false; // IMMEDIATE LOCAL UPDATE FIX
+                boostDetectorIsRunning = false; 
                 replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !stopboost:", e);
@@ -482,22 +558,24 @@ client.on('messageCreate', async message => {
         let replyMsg;
         if (boostDetectorIsRunning) { 
             const boostCount = message.guild.premiumSubscriptionCount || 0; 
-            const text = `TEST: ${message.member.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${message.member.user.username}! (This is a test announcement)`;
             
+            // 1. Text Announcement (Bot Message)
+            const text = `TEST: ${message.member.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${message.member.user.username}! (This is a test announcement)`;
             await announceBoost(text, client); 
             
-            // Manually run the user facing messages for the test:
+            // 2. Manually run the user facing messages for the test:
             const communityChannel = message.guild.channels.cache.get(COMMUNITY_CHANNEL_ID);
             const loungeChannel = message.guild.channels.cache.get(SERVER_LOUNGE_CHANNEL_ID);
             
             if (communityChannel) {
-                await communityChannel.send(`Thank you, ${message.member}! (Test)`).catch(console.error);
+                await communityChannel.send(`Thank you, ${message.member}!`).catch(console.error); 
+                
                 await communityChannel.send({ 
                     embeds: [createBoosterThankYouEmbed(message.member)], 
                 }).catch(console.error);
             }
             if (loungeChannel) {
-                await loungeChannel.send(`Welcome to the booster lounge ${message.member}! (Test)`).catch(console.error);
+                await loungeChannel.send(`Welcome to the booster lounge ${message.member}!`).catch(console.error);
             }
 
             replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost announcement test sent to <#${BOOST_OUTPUT_CHANNEL_ID}> and relevant channels.`);
@@ -522,7 +600,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
     }
 });
 
-// --- READY (Initialization - Status Fixed Here) ---
+// --- READY (Initialization - Status Fixed Here + Slash Command Registration) ---
 client.once('ready', async () => {
     console.log(`Bot online as ${client.user.tag}`);
     
@@ -556,19 +634,50 @@ client.once('ready', async () => {
 
     await loadRolesConfig();
     
+    // --- SLASH COMMAND REGISTRATION ---
+    if (GUILD_ID === "1402400197040013322") { // Check against the now-set ID
+        try {
+            const commands = [
+                {
+                    name: 'delete',
+                    description: 'Deletes a message using its full link. Leadership/Special User only.',
+                    options: [
+                        {
+                            name: 'message_link',
+                            description: 'The full Discord message link (right-click -> Copy Message Link).',
+                            type: ApplicationCommandOptionType.String,
+                            required: true,
+                        },
+                    ],
+                }
+            ];
+
+            const guild = client.guilds.cache.get(GUILD_ID);
+            if (guild) {
+                await guild.commands.set(commands);
+                console.log(`Successfully registered /delete slash command to Guild ID: ${GUILD_ID}`);
+            } else {
+                 console.error(`Failed to find Guild with ID: ${GUILD_ID}. Check the GUILD_ID constant.`);
+            }
+        } catch (error) {
+            console.error("Failed to register slash commands:", error);
+        }
+    }
+    // --- END SLASH COMMAND REGISTRATION ---
+
     // --- STATUS FIX: Set constant dual status on startup ---
     client.user.setPresence({
         activities: [
             { 
                 name: 'Watching over Adalea', 
-                type: 3, // 3 = Watching (Appears as "Watching over Adalea")
+                type: 3, 
             },
             {
                 name: '.gg/adalea',
-                type: 4, // 4 = Custom Status (Appears as thought bubble ".gg/adalea")
+                type: 4, 
             }
         ],
-        status: 'online', // Keep the bot online
+        status: 'online', 
     });
     console.log("Status set to dual custom activity.");
     // --- END STATUS FIX ---
