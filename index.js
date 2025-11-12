@@ -13,7 +13,7 @@ const http = require('http');
 const moment = require('moment-timezone');
 
 const PREFIX = '!';
-const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
+const LEADERSHIP_ROLE_ID = "1402400285674049576"; 
 const SPECIAL_USER_ID = "1107787991444881408"; // <-- CORRECTED ID
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
