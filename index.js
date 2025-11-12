@@ -14,15 +14,15 @@ const moment = require('moment-timezone');
 
 const PREFIX = '!';
 const LEADERSHIP_ROLE_ID = "1402400285674049714"; 
-const SPECIAL_USER_ID = "1107787791444881408"; // Corrected ID from previous snippet
+const SPECIAL_USER_ID = "1107787991444881408"; // <-- CORRECTED ID
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
 let isWelcomerActive = false; // Welcomer starts OFF
 
-// --- NEW BOOST CONSTANTS (UPDATED) ---
+// --- NEW BOOST CONSTANTS (FINAL) ---
 const GUILD_ID = "1402400197040013322"; // Your server ID
 const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Your target community channel
-const BOOSTER_LOUNGE_CHANNEL_ID = "1414381377389858908"; // **UPDATED Booster Lounge ID**
+const BOOSTER_LOUNGE_CHANNEL_ID = "1414381377389858908"; // Booster Lounge ID
 const SERVER_BOOSTER_ROLE_ID = "1404242033849270272";
 const BOOST_STATUS_FILE = 'boost_status.json';
 let boostStatus = { isActive: false }; // Initial state
@@ -357,7 +357,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 });
 
 
-// --- COMMANDS (Updated with Boost Commands) ---
+// --- COMMANDS (Permissions Check Confirmed) ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
@@ -366,12 +366,12 @@ client.on('messageCreate', async message => {
 
     const hasRole = message.member?.roles.cache.has(LEADERSHIP_ROLE_ID);
     const isSpecial = message.author.id === SPECIAL_USER_ID;
-    const isPermitted = hasRole || isSpecial; // User must be a Leader OR the Special User
+    const isPermitted = hasRole || isSpecial; // ONLY Leadership Role OR Special User ID
 
     // Permission check for listed commands (including new boost commands)
-    if (!isPermitted && ["roles","welcomeadalea","stopwelcomeadalea","testwelcome","restart", "startboost", "stopboost"].includes(command)) {
-        // Using message.reply().then(msg => msg.delete()) for non-ephemeral deletion outside of interactions
-        return message.reply("You do not have permission to use this command.").then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+    if (!isPermitted && ["roles","welcomeadalea","stopwelcomeadalea","testwelcome","restart", "startboost", "stopboost", "testboost"].includes(command)) {
+        // Adding 'testboost' to the restricted list for completeness as per required permission group.
+        return message.reply("You do not have permission to use this command.").then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
     }
 
     // Auto-delete the user command message after 5 seconds (preserve behavior)
@@ -411,26 +411,25 @@ client.on('messageCreate', async message => {
     // --- NEW BOOST COMMANDS ---
     
     if (command === "startboost") {
-        if (boostStatus.isActive) return message.channel.send({ content: `${EMOJI_REMOVED} **Boost handler is already active and running.**`, ephemeral: true });
+        if (boostStatus.isActive) return message.reply({ content: `${EMOJI_REMOVED} **Boost handler is already active and running.**`, ephemeral: true }).catch(err => {
+             message.channel.send(`${EMOJI_REMOVED} Boost handler is already active and running.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        });
         
         boostStatus.isActive = true;
         await saveBoostStatus();
-        // Since this is a command in a message, we must use reply or send with an ephemeral true workaround
         return message.reply({ content: `${EMOJI_ADDED} **Boost handler activated.** Future boosts will now be processed automatically.`, ephemeral: true }).catch(err => {
-             // Fallback for non-interaction reply if ephemeral fails
-             console.error("Ephemeral reply failed, falling back to temporary message:", err);
              message.channel.send(`${EMOJI_ADDED} Boost handler activated.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
         });
     }
     
     if (command === "stopboost") {
-        if (!boostStatus.isActive) return message.channel.send({ content: `${EMOJI_REMOVED} **Boost handler is already stopped.**`, ephemeral: true });
+        if (!boostStatus.isActive) return message.reply({ content: `${EMOJI_REMOVED} **Boost handler is already stopped.**`, ephemeral: true }).catch(err => {
+             message.channel.send(`${EMOJI_REMOVED} Boost handler is already stopped.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        });
         
         boostStatus.isActive = false;
         await saveBoostStatus();
         return message.reply({ content: `${EMOJI_ADDED} **Boost handler deactivated.** Future boosts will NOT be processed automatically until reactivated.`, ephemeral: true }).catch(err => {
-             // Fallback for non-interaction reply if ephemeral fails
-             console.error("Ephemeral reply failed, falling back to temporary message:", err);
              message.channel.send(`${EMOJI_ADDED} Boost handler deactivated.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
         });
     }
@@ -440,8 +439,6 @@ client.on('messageCreate', async message => {
         await sendBoostThankYou(message.member, message.channel);
         await sendBoosterLoungeWelcome(message.member, message.channel);
         return message.reply({ content: `${EMOJI_ADDED} **Boost messages sent to this channel for testing.**`, ephemeral: true }).catch(err => {
-             // Fallback for non-interaction reply if ephemeral fails
-             console.error("Ephemeral reply failed, falling back to temporary message:", err);
              message.channel.send(`${EMOJI_ADDED} Boost messages sent to this channel for testing.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
         });
     }
