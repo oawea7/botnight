@@ -365,7 +365,7 @@ client.on('messageCreate', async message => {
     const isSpecial = message.author.id === SPECIAL_USER_ID;
     const isAuthorized = hasRole || isSpecial;
 
-    // NOTE: All boost commands are now singular: startboost, stopboost
+    // NOTE: All boost commands are singular: startboost, stopboost
     const authorizedCommands = [
         "roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart",
         "startboost", "stopboost", "checkbooststate"
@@ -430,8 +430,6 @@ client.on('messageCreate', async message => {
         } else {
             try {
                 await setBoostState(true); // Attempt to write to Firebase
-                // STARTUS CHANGE: Watching over Adalea
-                client.user.setActivity('Watching over Adalea', { type: 3 }); 
                 replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !startboost:", e);
@@ -449,8 +447,6 @@ client.on('messageCreate', async message => {
         } else {
             try {
                 await setBoostState(false); // Attempt to write to Firebase
-                // STATUS CHANGE: Detector Off
-                client.user.setActivity('Detector Off', { type: 4 }); 
                 replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !stopboost:", e);
@@ -483,7 +479,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
     }
 });
 
-// --- READY (Initialization - Status Changed Here Too) ---
+// --- READY (Initialization - Status Fixed Here) ---
 client.once('ready', async () => {
     console.log(`Bot online as ${client.user.tag}`);
     
@@ -517,10 +513,22 @@ client.once('ready', async () => {
 
     await loadRolesConfig();
     
-    // SET INITIAL STATUS (line 573)
-    const statusText = boostDetectorIsRunning ? 'Watching over Adalea' : 'Detector Off';
-    const statusType = boostDetectorIsRunning ? 3 : 4; // 3 = Watching, 4 = Custom Status
-    client.user.setActivity(statusText, { type: statusType });
+    // --- STATUS FIX: Set constant dual status on startup ---
+    client.user.setPresence({
+        activities: [
+            { 
+                name: 'Watching over Adalea', 
+                type: 3, // 3 = Watching (Appears as "Watching over Adalea")
+            },
+            {
+                name: '.gg/adalea',
+                type: 4, // 4 = Custom Status (Appears as thought bubble ".gg/adalea")
+            }
+        ],
+        status: 'online', // Keep the bot online
+    });
+    console.log("Status set to dual custom activity.");
+    // --- END STATUS FIX ---
 });
 
 // --- KEEP-ALIVE ---
