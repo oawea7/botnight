@@ -368,7 +368,7 @@ client.on('messageCreate', async message => {
     // NOTE: All boost commands are singular: startboost, stopboost
     const authorizedCommands = [
         "roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart",
-        "startboost", "stopboost", "checkbooststate"
+        "startboost", "stopboost", "checkbooststate", "testboost" // <-- ADDED
     ];
 
     if (authorizedCommands.includes(command) && !isAuthorized) {
@@ -422,7 +422,7 @@ client.on('messageCreate', async message => {
         process.exit(1);
     }
     
-    // --- BOOST DETECTOR COMMANDS (FIXED for consistency and error handling) ---
+    // --- BOOST DETECTOR COMMANDS ---
     if (command === 'startboost') { // Singular command name
         let replyMsg;
         if (boostDetectorIsRunning) {
@@ -464,6 +464,24 @@ client.on('messageCreate', async message => {
         cleanupAndExit(replyMsg, message);
         return;
     }
+
+    // --- NEW: Test Boost Command ---
+    if (command === 'testboost') {
+        let replyMsg;
+        if (boostDetectorIsRunning) {
+            // Check current boost count (or default to 0 for a test)
+            const boostCount = message.guild.premiumSubscriptionCount || 0; 
+            const text = `TEST: ${message.member.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${message.member.user.username}! (This is a test announcement)`;
+            
+            await announceBoost(text, client); 
+            replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost announcement test sent to <#${BOOST_OUTPUT_CHANNEL_ID}>.`);
+        } else {
+            replyMsg = await message.channel.send(`${EMOJI_REMOVED} Test failed: Boost detector is currently **STOPPED**. Use \`!startboost\` first.`);
+        }
+        cleanupAndExit(replyMsg, message);
+        return;
+    }
+    // --- END NEW COMMAND ---
 });
 
 // --- MEMBER JOIN ---
