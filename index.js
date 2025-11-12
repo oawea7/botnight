@@ -69,6 +69,8 @@ const orangeFlower = "<:orangeflower:1436795365172052018>";
 const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
+// Custom flower emoji requested for boost thank you
+const customFlower = "<:flower:1424840226785988608>";
 
 // Welcome channels (you set these)
 const WELCOME_CHANNEL_ID = "1402405984978341888"; 
@@ -158,14 +160,14 @@ async function loadRolesConfig() {
 
 // --- BOOSTER LOGIC FUNCTIONS ---
 
-// The embed for the thank-you message
+// MODIFIED: Embed now uses specific title, description, and color
 function createBoosterThankYouEmbed(member) {
     return new EmbedBuilder()
         .setTitle(`Thank you for boosting Adalea, ${member.user.tag}!`)
         .setDescription(
-            `Your support helps our tropical island grow brighter and cozier every day! ${orangeFlower}`
+            `Your support helps our tropical island grow brighter and cozier every day! ${customFlower}` // Uses the specific custom flower emoji
         )
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+        // Set the color to yellowish orange (#FFCC33 is a good fit)
         .setColor("#FFCC33"); 
 }
 
@@ -194,17 +196,20 @@ async function handleBoosterStatusChange(oldMember, newMember) {
                 await announceBoost(text, client); 
             }
 
-            // 2. Send thank you embed 
+            // 2. Send thank you message in COMMUNITY CHANNEL (Now two messages)
             if (communityChannel) {
+                // Send the plain text part first
+                await communityChannel.send(`Thank you, ${newMember}!`).catch(console.error);
+
+                // Send the embed part
                 await communityChannel.send({ 
-                    content: `${newMember},`, // Ping the user first
                     embeds: [createBoosterThankYouEmbed(newMember)] 
-                });
+                }).catch(console.error);
             }
 
-            // 3. Send welcome message in server lounge
+            // 3. Send welcome message in SERVER LOUNGE (Specific requested text)
             if (loungeChannel) {
-                await loungeChannel.send(`Welcome, ${newMember} to the booster-lounge.`).catch(console.error);
+                await loungeChannel.send(`Welcome to the booster lounge ${newMember}!`).catch(console.error);
             }
             console.log(`[BOOSTER] ${newMember.user.tag} started boosting. Role assigned and messages sent.`);
         } catch (error) {
@@ -430,8 +435,8 @@ client.on('messageCreate', async message => {
             replyMsg = await message.channel.send(`${EMOJI_ADDED} The persistent boost detector is already running.`);
         } else {
             try {
-                await setBoostState(true); // 1. Writes 'true' to Firebase
-                boostDetectorIsRunning = true; // 2. ***IMMEDIATE LOCAL UPDATE FIX***
+                await setBoostState(true); 
+                boostDetectorIsRunning = true; // IMMEDIATE LOCAL UPDATE FIX
                 replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !startboost:", e);
@@ -448,8 +453,8 @@ client.on('messageCreate', async message => {
             replyMsg = await message.channel.send(`${EMOJI_REMOVED} The persistent boost detector is already stopped.`);
         } else {
             try {
-                await setBoostState(false); // 1. Writes 'false' to Firebase
-                boostDetectorIsRunning = false; // 2. ***IMMEDIATE LOCAL UPDATE FIX***
+                await setBoostState(false); 
+                boostDetectorIsRunning = false; // IMMEDIATE LOCAL UPDATE FIX
                 replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !stopboost:", e);
@@ -475,13 +480,27 @@ client.on('messageCreate', async message => {
     // --- Test Boost Command ---
     if (command === 'testboost') {
         let replyMsg;
-        // Check the local variable which was updated in !startboost
         if (boostDetectorIsRunning) { 
             const boostCount = message.guild.premiumSubscriptionCount || 0; 
             const text = `TEST: ${message.member.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${message.member.user.username}! (This is a test announcement)`;
             
             await announceBoost(text, client); 
-            replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost announcement test sent to <#${BOOST_OUTPUT_CHANNEL_ID}>.`);
+            
+            // Manually run the user facing messages for the test:
+            const communityChannel = message.guild.channels.cache.get(COMMUNITY_CHANNEL_ID);
+            const loungeChannel = message.guild.channels.cache.get(SERVER_LOUNGE_CHANNEL_ID);
+            
+            if (communityChannel) {
+                await communityChannel.send(`Thank you, ${message.member}! (Test)`).catch(console.error);
+                await communityChannel.send({ 
+                    embeds: [createBoosterThankYouEmbed(message.member)], 
+                }).catch(console.error);
+            }
+            if (loungeChannel) {
+                await loungeChannel.send(`Welcome to the booster lounge ${message.member}! (Test)`).catch(console.error);
+            }
+
+            replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost announcement test sent to <#${BOOST_OUTPUT_CHANNEL_ID}> and relevant channels.`);
         } else {
             replyMsg = await message.channel.send(`${EMOJI_REMOVED} Test failed: Boost detector is currently **STOPPED**. Use \`!startboost\` first.`);
         }
