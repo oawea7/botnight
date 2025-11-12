@@ -1,4 +1,4 @@
-const { 
+Const { 
     Client, 
     GatewayIntentBits, 
     EmbedBuilder, 
@@ -13,6 +13,10 @@ const http = require('http');
 const moment = require('moment-timezone');
 
 const PREFIX = '!';
+// --- BOOSTER CONFIGURATION ---
+const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Channel for the thank you embed
+const SERVER_BOOSTER_ROLE_ID = "1404242033849270272"; // The Server Booster role ID
+const SERVER_LOUNGE_CHANNEL_ID = "1414381377389858908"; // Channel for the welcome message
 // --- UPDATED LEADERSHIP ROLE ID ---
 const LEADERSHIP_ROLE_ID = "1402400285674049576"; // Corrected ID per your request
 const SPECIAL_USER_ID = "1107787991444881408"; 
@@ -65,7 +69,75 @@ async function loadRolesConfig() {
     }
 }
 
+// --- BOOSTER LOGIC FUNCTIONS ---
+
+// The embed for the thank-you message (based on the video content)
+function createBoosterThankYouEmbed(member) {
+    return new EmbedBuilder()
+        .setTitle(`Thank you for boosting Adalea, ${member.user.tag}!`)
+        .setDescription(
+            `Have it when the code i'm abt to send... \n\n` +
+            `This embed each time someone's boosts ,first pinging the user in plain text then sending this title: Thank you for boosting Adalea, @user! body text: Your support helps our tropical island grow brighter and cozier every day! ${orangeFlower}`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+        .setColor("#FFCC33"); // Adjusted to the embed color in the video
+}
+
+async function handleBoosterStatusChange(oldMember, newMember) {
+    const boosterRole = newMember.guild.roles.cache.get(SERVER_BOOSTER_ROLE_ID);
+    const communityChannel = newMember.guild.channels.cache.get(COMMUNITY_CHANNEL_ID);
+    const loungeChannel = newMember.guild.channels.cache.get(SERVER_LOUNGE_CHANNEL_ID);
+
+    if (!boosterRole || !communityChannel || !loungeChannel) {
+        console.error("[ERROR] Booster config missing (role/channels).");
+        return;
+    }
+
+    const wasBoosting = oldMember.premiumSince;
+    const isBoosting = newMember.premiumSince;
+    const hasRole = newMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID);
+
+    // --- CASE 1: Member started boosting (or re-boosting) ---
+    // premiumSince will change from null/undefined to a Date object, OR it's a new member who boosts immediately
+    if (isBoosting && !hasRole) {
+        try {
+            await newMember.roles.add(boosterRole, "Server Booster: Started/Re-started boosting.");
+            
+            // 1. Send thank you embed in community channel
+            await communityChannel.send({ 
+                content: `${newMember},`, // Ping the user first
+                embeds: [createBoosterThankYouEmbed(newMember)] 
+            });
+
+            // 2. Send welcome message in server lounge
+            await loungeChannel.send(`Welcome, ${newMember} to the booster-lounge.`).catch(console.error);
+            console.log(`[BOOSTER] ${newMember.user.tag} started boosting. Role assigned and messages sent.`);
+        } catch (error) {
+            console.error(`[BOOSTER] Failed to assign role or send messages for ${newMember.user.tag}:`, error);
+        }
+    }
+
+    // --- CASE 2: Member stopped boosting AND has 0 total boosts (Role removal) ---
+    // The role should only be removed if the member is no longer boosting (premiumSince is null) AND they currently have the role.
+    // Discord handles multiple boosts/unboosts; we just check if they are *currently* boosting.
+    if (!isBoosting && hasRole) {
+        try {
+            await newMember.roles.remove(boosterRole, "Server Booster: Stopped boosting (0 total boosts).");
+            
+            // Optionally, send a message about losing perks
+            await communityChannel.send(`Sadly, ${newMember} is no longer boosting and has lost the booster role and perks.`).catch(console.error);
+            console.log(`[BOOSTER] ${newMember.user.tag} stopped boosting. Role removed.`);
+        } catch (error) {
+            // Note: If the member has multiple boosts, `isBoosting` will still be non-null 
+            // until their total effective boosts drops to zero. 
+            // The logic here correctly relies on Discord setting `premiumSince` to null when the member has 0 effective boosts.
+            console.error(`[BOOSTER] Failed to remove role for ${newMember.user.tag}:`, error);
+        }
+    }
+}
+
 // --- ROLES PANEL ---
+// (createRolesPanel function remains the same)
 async function createRolesPanel(message) {
     if (!rolesConfig || Object.keys(rolesConfig).length === 0) {
         return message.channel.send("Error: roles.json is empty!").then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
@@ -112,6 +184,7 @@ async function createRolesPanel(message) {
 }
 
 // --- WELCOME MESSAGE (restored original format) ---
+// (sendWelcomeMessage function remains the same)
 async function sendWelcomeMessage(member, channel = null) {
     const targetChannel = channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
     if (!targetChannel) return;
@@ -153,6 +226,7 @@ async function sendWelcomeMessage(member, channel = null) {
 }
 
 // --- INTERACTIONS ---
+// (client.on('interactionCreate') remains the same)
 client.on('interactionCreate', async interaction => {
     if (!interaction.inGuild()) return;
     const member = interaction.member;
@@ -232,6 +306,7 @@ client.on('interactionCreate', async interaction => {
 });
 
 // --- COMMANDS (FIXED PERMISSION LOGIC) ---
+// (client.on('messageCreate') remains the same)
 client.on('messageCreate', async message => {
     // 1. Basic checks (Ensure member object exists)
     if (message.author.bot || !message.content.startsWith(PREFIX) || !message.member) return;
@@ -304,6 +379,16 @@ client.on('messageCreate', async message => {
 // --- MEMBER JOIN ---
 client.on("guildMemberAdd", async member => {
     if (isWelcomerActive) sendWelcomeMessage(member);
+});
+
+// --- MEMBER UPDATE (BOOSTER LOGIC) ---
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+    // Check if the boost status *might* have changed
+    if (oldMember.premiumSince !== newMember.premiumSince || 
+        !oldMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID) !== !newMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID)) 
+    {
+        await handleBoosterStatusChange(oldMember, newMember);
+    }
 });
 
 // --- READY ---
