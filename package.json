@@ -1,15 +1,19 @@
 {
-  "name": "adalea-bot",
+  "name": "adalea-discord-bot",
   "version": "1.0.0",
-  "description": "Discord bot for Adalea: Welcomer and Self-Roles system",
+  "description": "Discord Bot for Adalea.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.15.3",
-    "fs-extra": "^11.2.0",
-    "moment": "^2.29.4",
-    "moment-timezone": "^0.5.43"
+    "discord.js": "^14.x.x",
+    "firebase": "^10.x.x",
+    "fs-extra": "^11.x.x",
+    "moment-timezone": "^0.5.x"
+    // Add any other packages you installed (e.g., node-fetch if using older Node.js versions)
+  },
+  "engines": {
+    "node": ">=18.0.0" 
   }
 }
