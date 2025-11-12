@@ -52,7 +52,6 @@ try {
 } catch(e) {
     console.error("FIREBASE_CONFIG environment variable is malformed JSON:", e.message);
 }
-// Using standard ENV variable for token (assuming it's only needed for non-anonymous sign-in)
 const initialAuthToken = process.env.FIREBASE_AUTH_TOKEN; 
 
 let db, auth;
@@ -187,7 +186,6 @@ async function handleBoosterStatusChange(oldMember, newMember) {
             if (boosterRole) await newMember.roles.add(boosterRole, "Server Booster: Started/Re-started boosting.");
             
             // 1. ANNOUNCE VIA TEXT IF DETECTOR IS RUNNING
-            // NOTE: boostDetectorIsRunning is read from Firebase on startup and updated via commands
             if (boostDetectorIsRunning) {
                 const boostCount = newMember.guild.premiumSubscriptionCount;
                 const text = `${newMember.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${newMember.user.username}!`;
@@ -367,10 +365,10 @@ client.on('messageCreate', async message => {
     const isSpecial = message.author.id === SPECIAL_USER_ID;
     const isAuthorized = hasRole || isSpecial;
 
-    // NOTE: startboosts and stopboost are inconsistent in the original code, but maintained here.
+    // NOTE: All boost commands are now singular: startboost, stopboost
     const authorizedCommands = [
         "roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart",
-        "startboosts", "stopboost", "checkbooststate"
+        "startboost", "stopboost", "checkbooststate"
     ];
 
     if (authorizedCommands.includes(command) && !isAuthorized) {
@@ -424,18 +422,19 @@ client.on('messageCreate', async message => {
         process.exit(1);
     }
     
-    // --- BOOST DETECTOR COMMANDS (FIXED: Added robust error handling) ---
-    if (command === 'startboosts') {
+    // --- BOOST DETECTOR COMMANDS (FIXED for consistency and error handling) ---
+    if (command === 'startboost') { // Singular command name
         let replyMsg;
         if (boostDetectorIsRunning) {
             replyMsg = await message.channel.send(`${EMOJI_ADDED} The persistent boost detector is already running.`);
         } else {
             try {
                 await setBoostState(true); // Attempt to write to Firebase
-                client.user.setActivity('Watching for Boosts', { type: 4 });
+                // STARTUS CHANGE: Watching over Adalea
+                client.user.setActivity('Watching over Adalea', { type: 3 }); 
                 replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
             } catch (e) {
-                console.error("Error setting boost state in !startboosts:", e);
+                console.error("Error setting boost state in !startboost:", e);
                 replyMsg = await message.channel.send(`${EMOJI_REMOVED} **ERROR:** Failed to start boost detection (Firebase/Database issue).`);
             }
         }
@@ -445,13 +444,13 @@ client.on('messageCreate', async message => {
 
     if (command === 'stopboost') { // Singular command name
         let replyMsg;
-        // Check local state updated from Firebase on startup/previous command
         if (!boostDetectorIsRunning) { 
             replyMsg = await message.channel.send(`${EMOJI_REMOVED} The persistent boost detector is already stopped.`);
         } else {
             try {
                 await setBoostState(false); // Attempt to write to Firebase
-                client.user.setActivity('Boost Detector Off', { type: 4 });
+                // STATUS CHANGE: Detector Off
+                client.user.setActivity('Detector Off', { type: 4 }); 
                 replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !stopboost:", e);
@@ -484,7 +483,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
     }
 });
 
-// --- READY (Initialization) ---
+// --- READY (Initialization - Status Changed Here Too) ---
 client.once('ready', async () => {
     console.log(`Bot online as ${client.user.tag}`);
     
@@ -517,7 +516,11 @@ client.once('ready', async () => {
     // --- END FIREBASE INITIALIZATION ---
 
     await loadRolesConfig();
-    client.user.setActivity(boostDetectorIsRunning ? 'Watching for Boosts' : 'Boost Detector Off', { type: 4 });
+    
+    // SET INITIAL STATUS (line 573)
+    const statusText = boostDetectorIsRunning ? 'Watching over Adalea' : 'Detector Off';
+    const statusType = boostDetectorIsRunning ? 3 : 4; // 3 = Watching, 4 = Custom Status
+    client.user.setActivity(statusText, { type: statusType });
 });
 
 // --- KEEP-ALIVE ---
