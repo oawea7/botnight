@@ -278,10 +278,15 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "restart") {
-    await message.channel.send("Restarting... please stay on standby.").then((msg) =>
-      setTimeout(() => msg.delete().catch(() => {}), 5000)
-    );
-    process.exit(1);
+    await message.channel.send("Restarting bot...");
+    try {
+      await client.destroy();
+      await client.login(process.env.BOT_TOKEN);
+      await message.channel.send("Bot restarted successfully.");
+    } catch (e) {
+      console.error("[ERROR] Failed to restart bot:", e);
+      await message.channel.send("Failed to restart bot. Check logs.");
+    }
   }
 });
 
