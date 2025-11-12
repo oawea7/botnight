@@ -1,4 +1,4 @@
-Const { 
+const { 
     Client, 
     GatewayIntentBits, 
     EmbedBuilder, 
@@ -6,27 +6,55 @@ Const {
     ActionRowBuilder, 
     ButtonStyle, 
     StringSelectMenuBuilder, 
-    StringSelectMenuOptionBuilder 
+    StringSelectMenuOptionBuilder,
+    ChannelType 
 } = require('discord.js');
 const fs = require('fs-extra');
 const http = require('http');
 const moment = require('moment-timezone');
 
+// --- NEW IMPORTS FOR FIREBASE/PERSISTENCE ---
+// NOTE: You must have 'firebase' installed: npm install firebase
+const { initializeApp } = require('firebase/app');
+const { getAuth, signInWithCustomToken, signInAnonymously } = require('firebase/auth');
+const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore');
+// --- END NEW IMPORTS ---
+
 const PREFIX = '!';
-// --- BOOSTER CONFIGURATION ---
-const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Channel for the thank you embed
+
+// --- CONFIGURATION ---
+const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Channel for the thank you embed and TTS announcement fallback
 const SERVER_BOOSTER_ROLE_ID = "1404242033849270272"; // The Server Booster role ID
 const SERVER_LOUNGE_CHANNEL_ID = "1414381377389858908"; // Channel for the welcome message
-// --- UPDATED LEADERSHIP ROLE ID ---
-const LEADERSHIP_ROLE_ID = "1402400285674049576"; // Corrected ID per your request
+
+// --- LEADERSHIP/CONTROL CONFIG ---
+const LEADERSHIP_ROLE_ID = "1402400285674049576"; 
 const SPECIAL_USER_ID = "1107787991444881408"; 
+
+// --- BOOST DETECTOR CONFIGURATION ---
+const BOOST_OUTPUT_CHANNEL_ID = COMMUNITY_CHANNEL_ID; 
+const TTS_VOICE_NAME = 'Fenrir'; // Excitable voice for the announcement
+// Gemini API Configuration (used for TTS)
+const API_KEY = ""; // Placeholder, key is provided by Canvas environment at runtime
+const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+// --- END BOOST DETECTOR CONFIGURATION ---
+
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
 let isWelcomerActive = false; // Welcomer starts OFF
 
-// Updated confirmation emojis per your request
-const EMOJI_ADDED = "<a:Zcheck:1437064263570292906>";        // new check for added
-const EMOJI_REMOVED = "<a:Zx_:1437064220876472370>";       // X-ish emoji used for removed/errors (per your instruction)
+// --- FIREBASE/PERSISTENCE GLOBALS ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+
+let db, auth;
+let boostDetectorIsRunning = false; // Local in-memory state for persistence
+const PUBLIC_DATA_PATH = `/artifacts/${appId}/public/data/boost_state`; 
+
+// --- PROVIDED EMJOIS (ONLY THESE ARE USED FOR BOOST/COMMAND FEEDBACK) ---
+const EMOJI_ADDED = "<a:Zcheck:1437064263570292906>";        // new check for added (used for success/running)
+const EMOJI_REMOVED = "<a:Zx_:1437064220876472370>";       // X-ish emoji used for removed/errors (used for stopped/failure)
 
 // Welcome emojis (unchanged)
 const orangeFlower = "<:orangeflower:1436795365172052018>";
@@ -51,11 +79,167 @@ const client = new Client({
     ]
 });
 
+// --- FIREBASE/PERSISTENCE UTILITY FUNCTIONS ---
+
+/** Gets the document reference for the boost detection status. */
+const getStatusDocRef = () => {
+    return doc(db, PUBLIC_DATA_PATH, 'status');
+};
+
+/** Fetches the current boost detection state from Firestore. */
+async function getBoostState() {
+    try {
+        const docRef = getStatusDocRef();
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            return docSnap.data().isRunning;
+        } else {
+            await setDoc(docRef, { isRunning: false });
+            return false;
+        }
+    } catch (error) {
+        console.error("Error fetching boost state from Firestore:", error);
+        return false; 
+    }
+}
+
+/** Updates the boost detection state in Firestore. */
+async function setBoostState(status) {
+    try {
+        const docRef = getStatusDocRef();
+        await setDoc(docRef, { isRunning: status }, { merge: true });
+        boostDetectorIsRunning = status; 
+        console.log(`Boost detection state updated to: ${status}`);
+    } catch (error) {
+        console.error("Error setting boost state in Firestore:", error);
+    }
+}
+
+// --- TTS Utility Functions ---
+
+/** Converts a base64 string to an ArrayBuffer. */
+function base64ToArrayBuffer(base64) {
+    const binaryString = Buffer.from(base64, 'base64').toString('binary');
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+/** Converts PCM 16-bit audio data to a WAV Buffer. */
+function pcmToWav(pcm16, sampleRate) {
+    const numChannels = 1;
+    const numSamples = pcm16.length;
+    const byteRate = sampleRate * numChannels * 2; 
+
+    const buffer = Buffer.alloc(44 + numSamples * 2);
+    const view = new DataView(buffer.buffer);
+
+    // Write WAV header
+    view.setUint32(0, 0x52494646, false); // "RIFF"
+    view.setUint32(4, 36 + numSamples * 2, true); // Chunk size
+    view.setUint32(8, 0x57415645, false); // "WAVE"
+    view.setUint32(12, 0x666d7420, false); // "fmt "
+    view.setUint32(16, 16, true); // Sub-chunk 1 size (16 for PCM)
+    view.setUint16(20, 1, true); // Audio format (1 for PCM)
+    view.setUint16(22, numChannels, true); // Number of channels
+    view.setUint32(24, sampleRate, true); // Sample rate
+    view.setUint32(28, byteRate, true); // Byte rate
+    view.setUint16(32, numChannels * 2, true); // Block align
+    view.setUint16(34, 16, true); // Bits per sample
+    view.setUint32(36, 0x64617461, false); // "data"
+    view.setUint32(40, numSamples * 2, true); // Sub-chunk 2 size
+
+    // Write PCM data
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+        view.setInt16(offset, pcm16[i], true); // Write little-endian
+        offset += 2;
+    }
+
+    return buffer; // Return Node.js Buffer
+}
+
+/** Calls the Gemini TTS API and sends the resulting audio as a file. */
+async function announceBoost(textToSpeak, client) {
+    console.log(`TTS Request: ${textToSpeak}`);
+    const payload = {
+        contents: [{
+            parts: [{ text: textToSpeak }]
+        }],
+        generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: TTS_VOICE_NAME }
+                }
+            }
+        },
+        model: "gemini-2.5-flash-preview-tts"
+    };
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const response = await fetch(TTS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`API returned status ${response.status}`);
+            }
+
+            const result = await response.json();
+            const part = result?.candidates?.[0]?.content?.parts?.[0];
+            const audioData = part?.inlineData?.data;
+            const mimeType = part?.inlineData?.mimeType;
+
+            if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000; 
+
+                const pcmData = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmData);
+                const wavBuffer = pcmToWav(pcm16, sampleRate);
+
+                // Send the audio file to the Discord channel
+                const channel = client.channels.cache.get(BOOST_OUTPUT_CHANNEL_ID);
+                if (channel && channel.type === ChannelType.GuildText) {
+                    await channel.send({
+                        content: `**TTS Announcement:** ${orangeFlower}`,
+                        files: [{ attachment: wavBuffer, name: 'boost_announcement.wav' }]
+                    });
+                }
+                return; // Success, exit the retry loop
+            } else {
+                throw new Error("TTS API response missing audio data.");
+            }
+        } catch (error) {
+            console.warn(`TTS API call attempt ${attempt} failed: ${error.message}`);
+            if (attempt < 3) {
+                const delay = Math.pow(2, attempt) * 1000; 
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error("All TTS API attempts failed. Skipping audio announcement.");
+                const channel = client.channels.cache.get(BOOST_OUTPUT_CHANNEL_ID);
+                if (channel && channel.type === ChannelType.GuildText) {
+                    // Using EMOJI_REMOVED for failure fallback
+                    channel.send(`${EMOJI_REMOVED} **Boost Announcement Failed** (Text fallback used).`);
+                }
+            }
+        }
+    }
+}
+// --- END FIREBASE/TTS UTILITY FUNCTIONS ---
+
 // --- LOAD roles.json ---
 async function loadRolesConfig() {
     try {
         rolesConfig = await fs.readJson(ROLES_FILE);
-        // Append "Any" pronoun role if it's not present already
         if (!Array.isArray(rolesConfig.PRONOUN_ROLES)) rolesConfig.PRONOUN_ROLES = [];
         const anyExists = rolesConfig.PRONOUN_ROLES.some(r => r.roleId === "1402704905264697374");
         if (!anyExists) {
@@ -71,16 +255,15 @@ async function loadRolesConfig() {
 
 // --- BOOSTER LOGIC FUNCTIONS ---
 
-// The embed for the thank-you message (based on the video content)
+// The embed for the thank-you message
 function createBoosterThankYouEmbed(member) {
     return new EmbedBuilder()
         .setTitle(`Thank you for boosting Adalea, ${member.user.tag}!`)
         .setDescription(
-            `Have it when the code i'm abt to send... \n\n` +
-            `This embed each time someone's boosts ,first pinging the user in plain text then sending this title: Thank you for boosting Adalea, @user! body text: Your support helps our tropical island grow brighter and cozier every day! ${orangeFlower}`
+            `Your support helps our tropical island grow brighter and cozier every day! ${orangeFlower}`
         )
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-        .setColor("#FFCC33"); // Adjusted to the embed color in the video
+        .setColor("#FFCC33"); 
 }
 
 async function handleBoosterStatusChange(oldMember, newMember) {
@@ -90,54 +273,59 @@ async function handleBoosterStatusChange(oldMember, newMember) {
 
     if (!boosterRole || !communityChannel || !loungeChannel) {
         console.error("[ERROR] Booster config missing (role/channels).");
-        return;
     }
 
-    const wasBoosting = oldMember.premiumSince;
     const isBoosting = newMember.premiumSince;
     const hasRole = newMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID);
-
-    // --- CASE 1: Member started boosting (or re-boosting) ---
-    // premiumSince will change from null/undefined to a Date object, OR it's a new member who boosts immediately
+    
+    // --- New Booster / Re-Booster Logic ---
     if (isBoosting && !hasRole) {
         try {
-            await newMember.roles.add(boosterRole, "Server Booster: Started/Re-started boosting.");
+            if (boosterRole) await newMember.roles.add(boosterRole, "Server Booster: Started/Re-started boosting.");
             
-            // 1. Send thank you embed in community channel
-            await communityChannel.send({ 
-                content: `${newMember},`, // Ping the user first
-                embeds: [createBoosterThankYouEmbed(newMember)] 
-            });
+            // 1. ANNOUNCE VIA TTS/TEXT IF DETECTOR IS RUNNING
+            if (boostDetectorIsRunning) {
+                const boostCount = newMember.guild.premiumSubscriptionCount;
+                const text = `Attention, ${newMember.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${newMember.user.username}!`;
+                
+                await announceBoost(text, client); 
+            }
 
-            // 2. Send welcome message in server lounge
-            await loungeChannel.send(`Welcome, ${newMember} to the booster-lounge.`).catch(console.error);
+            // 2. Send thank you embed 
+            if (communityChannel) {
+                await communityChannel.send({ 
+                    content: `${newMember},`, // Ping the user first
+                    embeds: [createBoosterThankYouEmbed(newMember)] 
+                });
+            }
+
+            // 3. Send welcome message in server lounge
+            if (loungeChannel) {
+                await loungeChannel.send(`Welcome, ${newMember} to the booster-lounge.`).catch(console.error);
+            }
             console.log(`[BOOSTER] ${newMember.user.tag} started boosting. Role assigned and messages sent.`);
         } catch (error) {
             console.error(`[BOOSTER] Failed to assign role or send messages for ${newMember.user.tag}:`, error);
         }
     }
 
-    // --- CASE 2: Member stopped boosting AND has 0 total boosts (Role removal) ---
-    // The role should only be removed if the member is no longer boosting (premiumSince is null) AND they currently have the role.
-    // Discord handles multiple boosts/unboosts; we just check if they are *currently* boosting.
+    // --- Booster Stopped Logic ---
     if (!isBoosting && hasRole) {
         try {
-            await newMember.roles.remove(boosterRole, "Server Booster: Stopped boosting (0 total boosts).");
+            if (boosterRole) await newMember.roles.remove(boosterRole, "Server Booster: Stopped boosting (0 total boosts).");
             
-            // Optionally, send a message about losing perks
-            await communityChannel.send(`Sadly, ${newMember} is no longer boosting and has lost the booster role and perks.`).catch(console.error);
+            // Send a message about losing perks
+            if (communityChannel) {
+                await communityChannel.send(`Sadly, ${newMember} is no longer boosting and has lost the booster role and perks.`).catch(console.error);
+            }
             console.log(`[BOOSTER] ${newMember.user.tag} stopped boosting. Role removed.`);
         } catch (error) {
-            // Note: If the member has multiple boosts, `isBoosting` will still be non-null 
-            // until their total effective boosts drops to zero. 
-            // The logic here correctly relies on Discord setting `premiumSince` to null when the member has 0 effective boosts.
             console.error(`[BOOSTER] Failed to remove role for ${newMember.user.tag}:`, error);
         }
     }
 }
 
-// --- ROLES PANEL ---
-// (createRolesPanel function remains the same)
+// --- ROLES PANEL & INTERACTIONS (Unchanged) ---
 async function createRolesPanel(message) {
     if (!rolesConfig || Object.keys(rolesConfig).length === 0) {
         return message.channel.send("Error: roles.json is empty!").then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
@@ -162,7 +350,6 @@ async function createRolesPanel(message) {
             .setLabel('Pings')
             .setStyle(ButtonStyle.Primary)
             .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS && rolesConfig.BUTTON_EMOJIS.pings && (rolesConfig.BUTTON_EMOJIS.pings.match(/\d+/) || [])[0]) || null }),
-        // Button renamed to "Sessions" (uses same SHIFTS_ROLES data)
         new ButtonBuilder()
             .setCustomId('roles_sessions')
             .setLabel('Sessions')
@@ -173,28 +360,22 @@ async function createRolesPanel(message) {
     try {
         const sentMessage = await message.channel.send({ embeds: [embed], components: [row] });
         console.log("[DEBUG] Roles panel sent successfully.");
-        // auto-delete the user's command message after 5 seconds if possible
         if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
             setTimeout(() => message.delete().catch(() => {}), 5000);
         }
-        // Keep the embed (do not delete it)
     } catch (err) {
         console.error("[ERROR] Failed to send roles panel:", err);
     }
 }
 
-// --- WELCOME MESSAGE (restored original format) ---
-// (sendWelcomeMessage function remains the same)
 async function sendWelcomeMessage(member, channel = null) {
     const targetChannel = channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
     if (!targetChannel) return;
 
     const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
 
-    // Text mention first (unchanged original)
     await targetChannel.send(`Welcome, ${member}!`);
 
-    // Embed following the original format (kept wording & emojis)
     const embed = new EmbedBuilder()
         .setTitle(`${orangeFlower} **Welcome to Adalea!**`)
         .setDescription(
@@ -225,8 +406,6 @@ async function sendWelcomeMessage(member, channel = null) {
     });
 }
 
-// --- INTERACTIONS ---
-// (client.on('interactionCreate') remains the same)
 client.on('interactionCreate', async interaction => {
     if (!interaction.inGuild()) return;
     const member = interaction.member;
@@ -238,7 +417,6 @@ client.on('interactionCreate', async interaction => {
 
         if (id === "roles_pronouns") { category = rolesConfig.PRONOUN_ROLES; name = "Pronouns"; emoji = "<:bluelotus:1436877456446459974>"; }
         if (id === "roles_pings") { category = rolesConfig.PINGS_ROLES; name = "Pings"; emoji = "<:lotus:1424840252945600632>"; }
-        // Sessions button maps to SHIFTS_ROLES data (no change to your data file)
         if (id === "roles_sessions") { category = rolesConfig.SHIFTS_ROLES; name = "Sessions"; emoji = "<:whitelotus:1436877184781258882>"; }
         if (!category) return;
 
@@ -288,7 +466,6 @@ client.on('interactionCreate', async interaction => {
             if (!selected && hasRole) { 
                 try { 
                     await interaction.member.roles.remove(roleId); 
-                    // per your instruction, use the X-style emoji for removals
                     removed.push(`${EMOJI_REMOVED} <@&${roleId}>`); 
                 } catch(e){ 
                     console.error(e); 
@@ -305,10 +482,9 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- COMMANDS (FIXED PERMISSION LOGIC) ---
-// (client.on('messageCreate') remains the same)
+// --- COMMANDS ---
 client.on('messageCreate', async message => {
-    // 1. Basic checks (Ensure member object exists)
+    // 1. Basic checks
     if (message.author.bot || !message.content.startsWith(PREFIX) || !message.member) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
@@ -320,24 +496,23 @@ client.on('messageCreate', async message => {
     const isAuthorized = hasRole || isSpecial;
 
     // 3. Define commands that require authorization
-    const authorizedCommands = ["roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart"];
+    const authorizedCommands = [
+        "roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart",
+        "startboosts", "stopboost", "checkbooststate"
+    ];
 
-    // 4. Permission Check & Handle Unauthorized Access (Crucial Fix)
+    // 4. Permission Check & Handle Unauthorized Access
     if (authorizedCommands.includes(command) && !isAuthorized) {
-        // Send the permission error message
         const reply = await message.reply("You do not have permission to use this command.");
-        // Delete the error message after 5 seconds
         setTimeout(() => reply.delete().catch(() => {}), 5000);
-        return; // Stop execution immediately for unauthorized users
+        return; 
     }
 
     // 5. Delete the User's Command Message (Only runs if authorized or command doesn't require auth)
     try {
         if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
-            // Delete the user's command message immediately 
             await message.delete().catch(() => {});
         } else {
-            // Fallback for timed delete if bot lacks ManageMessages permission
             setTimeout(() => message.delete().catch(() => {}), 5000);
         }
     } catch (e) {
@@ -346,6 +521,7 @@ client.on('messageCreate', async message => {
 
     // --- Command Execution ---
 
+    // Standard commands
     if (command === 'roles') {
         await createRolesPanel(message);
         return;
@@ -364,7 +540,6 @@ client.on('messageCreate', async message => {
     }
 
     if (command === "testwelcome") {
-        // send the welcome message into the current channel (works even if welcomer is off)
         await sendWelcomeMessage(message.member, message.channel);
         return;
     }
@@ -373,6 +548,36 @@ client.on('messageCreate', async message => {
         const sentMsg = await message.channel.send("Restarting... please stay on stand by");
         setTimeout(() => sentMsg.delete().catch(() => {}), 5000); 
         process.exit(1);
+    }
+    
+    // --- BOOST DETECTOR COMMANDS ---
+    if (command === 'startboosts') {
+        if (boostDetectorIsRunning) {
+            return message.channel.send(`${EMOJI_ADDED} The persistent boost detector is already running.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        }
+        await setBoostState(true);
+        client.user.setActivity('Watching for Boosts', { type: 4 });
+        // Use EMOJI_ADDED for success
+        message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        return;
+    }
+
+    if (command === 'stopboost') {
+        if (!boostDetectorIsRunning) {
+            return message.channel.send(`${EMOJI_REMOVED} The persistent boost detector is already stopped.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        }
+        await setBoostState(false);
+        client.user.setActivity('Boost Detector Off', { type: 4 });
+        // Use EMOJI_REMOVED for stopping
+        message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        return;
+    }
+
+    if (command === 'checkbooststate') { 
+        const statusEmoji = boostDetectorIsRunning ? EMOJI_ADDED : EMOJI_REMOVED;
+        const statusText = boostDetectorIsRunning ? 'RUNNING' : 'STOPPED';
+        message.channel.send(`${statusEmoji} The persistent boost detector is currently **${statusText}**.`);
+        return;
     }
 });
 
@@ -383,7 +588,6 @@ client.on("guildMemberAdd", async member => {
 
 // --- MEMBER UPDATE (BOOSTER LOGIC) ---
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
-    // Check if the boost status *might* have changed
     if (oldMember.premiumSince !== newMember.premiumSince || 
         !oldMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID) !== !newMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID)) 
     {
@@ -391,10 +595,34 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
     }
 });
 
-// --- READY ---
+// --- READY (Updated with Firebase/Persistence Initialization) ---
 client.once('ready', async () => {
     console.log(`Bot online as ${client.user.tag}`);
+    
+    // --- FIREBASE INITIALIZATION ---
+    try {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        if (initialAuthToken) {
+            await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+            await signInAnonymously(auth);
+        }
+        console.log("Firebase authentication successful.");
+
+        // Load the persistent state from Firestore
+        boostDetectorIsRunning = await getBoostState();
+        console.log(`Boost detector starting state: ${boostDetectorIsRunning ? 'RUNNING' : 'STOPPED'}`);
+
+    } catch (error) {
+        console.error("Failed to initialize Firebase or load state:", error);
+    }
+    // --- END FIREBASE INITIALIZATION ---
+
     await loadRolesConfig();
+    client.user.setActivity(boostDetectorIsRunning ? 'Watching for Boosts' : 'Boost Detector Off', { type: 4 });
 });
 
 // --- KEEP-ALIVE ---
@@ -402,3 +630,5 @@ http.createServer((req,res)=>{res.writeHead(200);res.end('Alive');}).listen(proc
 
 // --- LOGIN ---
 client.login(process.env.BOT_TOKEN);
+
+
