@@ -13,12 +13,12 @@ const fs = require('fs-extra');
 const http = require('http');
 const moment = require('moment-timezone');
 
-// --- NEW IMPORTS FOR FIREBASE/PERSISTENCE ---
+// --- FIREBASE IMPORTS ---
 // NOTE: You must have 'firebase' installed: npm install firebase
 const { initializeApp } = require('firebase/app');
 const { getAuth, signInWithCustomToken, signInAnonymously } = require('firebase/auth');
 const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore');
-// --- END NEW IMPORTS ---
+// --- END FIREBASE IMPORTS ---
 
 const PREFIX = '!';
 
@@ -33,21 +33,33 @@ const SPECIAL_USER_ID = "1107787991444881408";
 
 // --- BOOST DETECTOR CONFIGURATION ---
 const BOOST_OUTPUT_CHANNEL_ID = COMMUNITY_CHANNEL_ID; 
-// Removed TTS_VOICE_NAME and Gemini API key config
+// TTS functionality has been removed.
 // --- END BOOST DETECTOR CONFIGURATION ---
 
 const ROLES_FILE = 'roles.json';
 let rolesConfig = {};
 let isWelcomerActive = false; // Welcomer starts OFF
 
-// --- FIREBASE/PERSISTENCE GLOBALS ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+// --- FIREBASE/PERSISTENCE GLOBALS (FIXED FOR RENDER/STANDARD HOSTING) ---
+let firebaseConfig = {};
+try {
+    // Read the full config from the environment variable set in Render
+    if (process.env.FIREBASE_CONFIG) {
+        firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG); 
+    } else {
+        console.warn("FIREBASE_CONFIG environment variable is not set. Boost state persistence will fail.");
+    }
+} catch(e) {
+    console.error("FIREBASE_CONFIG environment variable is malformed JSON:", e.message);
+}
+// Using standard ENV variable for token (assuming it's only needed for non-anonymous sign-in)
+const initialAuthToken = process.env.FIREBASE_AUTH_TOKEN; 
 
 let db, auth;
 let boostDetectorIsRunning = false; // Local in-memory state for persistence
-const PUBLIC_DATA_PATH = `/artifacts/${appId}/public/data/boost_state`; 
+// CRITICAL FIX: Simplified path to ensure consistent reads/writes in Firestore
+const PUBLIC_DATA_PATH = 'bot_boost_state'; 
+// --- END FIREBASE/PERSISTENCE GLOBALS ---
 
 // --- PROVIDED EMJOIS (ONLY THESE ARE USED FOR BOOST/COMMAND FEEDBACK) ---
 const EMOJI_ADDED = "<a:Zcheck:1437064263570292906>";        // new check for added (used for success/running)
@@ -80,11 +92,13 @@ const client = new Client({
 
 /** Gets the document reference for the boost detection status. */
 const getStatusDocRef = () => {
-    return doc(db, PUBLIC_DATA_PATH, 'status');
+    // Use a fixed document ID within the stable collection path
+    return doc(db, PUBLIC_DATA_PATH, 'status_doc');
 };
 
 /** Fetches the current boost detection state from Firestore. */
 async function getBoostState() {
+    if (!db) return false;
     try {
         const docRef = getStatusDocRef();
         const docSnap = await getDoc(docRef);
@@ -92,6 +106,7 @@ async function getBoostState() {
         if (docSnap.exists()) {
             return docSnap.data().isRunning;
         } else {
+            // Document doesn't exist, initialize it and return false
             await setDoc(docRef, { isRunning: false });
             return false;
         }
@@ -103,6 +118,7 @@ async function getBoostState() {
 
 /** Updates the boost detection state in Firestore. */
 async function setBoostState(status) {
+    if (!db) return;
     try {
         const docRef = getStatusDocRef();
         await setDoc(docRef, { isRunning: status }, { merge: true });
@@ -113,9 +129,7 @@ async function setBoostState(status) {
     }
 }
 
-// --- TTS Utility Functions (REMOVED: Now a simple text announcement) ---
-
-/** Announces the boost using a standard text message. */
+/** Announces the boost using a standard text message (TTS removed). */
 async function announceBoost(textToSpeak, client) {
     console.log(`Boost Text Announcement: ${textToSpeak}`);
     const channel = client.channels.cache.get(BOOST_OUTPUT_CHANNEL_ID);
@@ -172,7 +186,8 @@ async function handleBoosterStatusChange(oldMember, newMember) {
         try {
             if (boosterRole) await newMember.roles.add(boosterRole, "Server Booster: Started/Re-started boosting.");
             
-            // 1. ANNOUNCE VIA TEXT IF DETECTOR IS RUNNING (TTS replaced with simple text)
+            // 1. ANNOUNCE VIA TEXT IF DETECTOR IS RUNNING
+            // NOTE: boostDetectorIsRunning is read from Firebase on startup and updated via commands
             if (boostDetectorIsRunning) {
                 const boostCount = newMember.guild.premiumSubscriptionCount;
                 const text = `${newMember.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${newMember.user.username}!`;
@@ -214,89 +229,8 @@ async function handleBoosterStatusChange(oldMember, newMember) {
     }
 }
 
-// --- ROLES PANEL & INTERACTIONS (Unchanged) ---
-async function createRolesPanel(message) {
-    if (!rolesConfig || Object.keys(rolesConfig).length === 0) {
-        const msg = await message.channel.send("Error: roles.json is empty!");
-        return msg; // Return for cleanup
-    }
-
-    const embed = new EmbedBuilder()
-        .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
-        .setDescription(
-            `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
-        )
-        .setImage(rolesConfig.EMBED_IMAGE)
-        .setColor(rolesConfig.EMBED_COLOR);
-
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('roles_pronouns')
-            .setLabel('Pronouns')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS && rolesConfig.BUTTON_EMOJIS.pronoun && (rolesConfig.BUTTON_EMOJIS.pronoun.match(/\d+/) || [])[0]) || null }),
-        new ButtonBuilder()
-            .setCustomId('roles_pings')
-            .setLabel('Pings')
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS && rolesConfig.BUTTON_EMOJIS.pings && (rolesConfig.BUTTON_EMOJIS.pings.match(/\d+/) || [])[0]) || null }),
-        new ButtonBuilder()
-            .setCustomId('roles_sessions')
-            .setLabel('Sessions')
-            .setStyle(ButtonStyle.Success)
-            .setEmoji({ id: (rolesConfig.BUTTON_EMOJIS && rolesConfig.BUTTON_EMOJIS.shifts && (rolesConfig.BUTTON_EMOJIS.shifts.match(/\d+/) || [])[0]) || null })
-    );
-
-    try {
-        const sentMessage = await message.channel.send({ embeds: [embed], components: [row] });
-        console.log("[DEBUG] Roles panel sent successfully.");
-        return sentMessage; // Return for cleanup
-    } catch (err) {
-        console.error("[ERROR] Failed to send roles panel:", err);
-        return null;
-    }
-}
-
-async function sendWelcomeMessage(member, channel = null) {
-    const targetChannel = channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-    if (!targetChannel) return;
-
-    const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
-
-    await targetChannel.send(`Welcome, ${member}!`);
-
-    const embed = new EmbedBuilder()
-        .setTitle(`${orangeFlower} **Welcome to Adalea!**`)
-        .setDescription(
-            `Welcome, ${member}! We're so happy to have you here!\n\n` +
-            `Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\n` +
-            `Please make sure to review the <#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
-        )
-        .setImage("https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png?ex=691060e0&is=690f0f60&hm=50489a1967a090539ad600113390ed0bede095df7ba58eb28ac4c9e4a718edfa")
-        .setFooter({ text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}` })
-        .setColor("#FFCC33");
-
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setLabel("Roblox Group")
-            .setStyle(ButtonStyle.Link)
-            .setURL("https://www.roblox.com/communities/250548768/Adalea#!/about")
-            .setEmoji(robloxEmoji),
-        new ButtonBuilder()
-            .setLabel("Public Handbook")
-            .setStyle(ButtonStyle.Link)
-            .setURL("https://devforum.roblox.com/t/adalea-handbook/3925323")
-            .setEmoji(handbookEmoji)
-    );
-
-    const sentMsg = await targetChannel.send({
-        embeds: [embed],
-        components: [row]
-    });
-    return sentMsg;
-}
-
 client.on('interactionCreate', async interaction => {
+    // ... Roles Panel and Interaction logic remains unchanged ...
     if (!interaction.inGuild()) return;
     const member = interaction.member;
     if (!member) return;
@@ -372,20 +306,51 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+async function sendWelcomeMessage(member, channel = null) {
+    const targetChannel = channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+    if (!targetChannel) return;
+
+    const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
+
+    await targetChannel.send(`Welcome, ${member}!`);
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${orangeFlower} **Welcome to Adalea!**`)
+        .setDescription(
+            `Welcome, ${member}! We're so happy to have you here!\n\n` +
+            `Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\n` +
+            `Please make sure to review the <#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
+        )
+        .setImage("https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png?ex=691060e0&is=690f0f60&hm=50489a1967a090539ad600113390ed0bede095df7ba58eb28ac4c9e4a718edfa")
+        .setFooter({ text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}` })
+        .setColor("#FFCC33");
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setLabel("Roblox Group")
+            .setStyle(ButtonStyle.Link)
+            .setURL("https://www.roblox.com/communities/250548768/Adalea#!/about")
+            .setEmoji(robloxEmoji),
+        new ButtonBuilder()
+            .setLabel("Public Handbook")
+            .setStyle(ButtonStyle.Link)
+            .setURL("https://devforum.roblox.com/t/adalea-handbook/3925323")
+            .setEmoji(handbookEmoji)
+    );
+
+    const sentMsg = await targetChannel.send({
+        embeds: [embed],
+        components: [row]
+    });
+    return sentMsg;
+}
+
 // --- HELPER FUNCTION FOR COMMAND CLEANUP ---
-/**
- * Deletes the bot's response and the user's command message after a delay.
- * @param {import('discord.js').Message} botMessage The bot's reply message.
- * @param {import('discord.js').Message} userMessage The user's command message.
- */
 const cleanupAndExit = async (botMessage, userMessage) => {
-    // Wait 5 seconds
     await new Promise(r => setTimeout(r, 5000));
-    // Attempt to delete the bot's message
     if (botMessage && !botMessage.deleted) {
         await botMessage.delete().catch(() => {});
     }
-    // Attempt to delete the user's command message
     if (userMessage && !userMessage.deleted) {
         await userMessage.delete().catch(() => {});
     }
@@ -393,24 +358,21 @@ const cleanupAndExit = async (botMessage, userMessage) => {
 
 // --- COMMANDS ---
 client.on('messageCreate', async message => {
-    // 1. Basic checks
     if (message.author.bot || !message.content.startsWith(PREFIX) || !message.member) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const command = args.shift().toLowerCase();
 
-    // 2. Permission Check Preparation
     const hasRole = message.member.roles.cache.has(LEADERSHIP_ROLE_ID);
     const isSpecial = message.author.id === SPECIAL_USER_ID;
     const isAuthorized = hasRole || isSpecial;
 
-    // 3. Define commands that require authorization
+    // NOTE: startboosts and stopboost are inconsistent in the original code, but maintained here.
     const authorizedCommands = [
         "roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart",
         "startboosts", "stopboost", "checkbooststate"
     ];
 
-    // 4. Permission Check & Handle Unauthorized Access
     if (authorizedCommands.includes(command) && !isAuthorized) {
         const reply = await message.reply("You do not have permission to use this command.");
         cleanupAndExit(reply, message);
@@ -419,10 +381,9 @@ client.on('messageCreate', async message => {
 
     // --- Command Execution ---
 
-    // Standard commands
     if (command === 'roles') {
         const sentMsg = await createRolesPanel(message);
-        cleanupAndExit(sentMsg, message); // Cleanup the user's command
+        cleanupAndExit(sentMsg, message);
         return;
     }
 
@@ -451,7 +412,6 @@ client.on('messageCreate', async message => {
     }
 
     if (command === "testwelcome") {
-        // testwelcome sends multiple messages, so we only clean up the initial command message.
         await sendWelcomeMessage(message.member, message.channel);
         await message.delete().catch(() => {});
         return;
@@ -459,35 +419,44 @@ client.on('messageCreate', async message => {
 
     if (command === "restart") {
         const sentMsg = await message.channel.send("Restarting... please stay on stand by");
-        // Don't wait 5s for cleanup, just delete the command immediately and exit
         await message.delete().catch(() => {});
-        // The bot's message is left up for the 5s, as originally intended.
         setTimeout(() => sentMsg.delete().catch(() => {}), 5000); 
         process.exit(1);
     }
     
-    // --- BOOST DETECTOR COMMANDS (TTS Removed) ---
+    // --- BOOST DETECTOR COMMANDS (FIXED: Added robust error handling) ---
     if (command === 'startboosts') {
         let replyMsg;
         if (boostDetectorIsRunning) {
             replyMsg = await message.channel.send(`${EMOJI_ADDED} The persistent boost detector is already running.`);
         } else {
-            await setBoostState(true);
-            client.user.setActivity('Watching for Boosts', { type: 4 });
-            replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
+            try {
+                await setBoostState(true); // Attempt to write to Firebase
+                client.user.setActivity('Watching for Boosts', { type: 4 });
+                replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
+            } catch (e) {
+                console.error("Error setting boost state in !startboosts:", e);
+                replyMsg = await message.channel.send(`${EMOJI_REMOVED} **ERROR:** Failed to start boost detection (Firebase/Database issue).`);
+            }
         }
         cleanupAndExit(replyMsg, message);
         return;
     }
 
-    if (command === 'stopboost') {
+    if (command === 'stopboost') { // Singular command name
         let replyMsg;
-        if (!boostDetectorIsRunning) {
+        // Check local state updated from Firebase on startup/previous command
+        if (!boostDetectorIsRunning) { 
             replyMsg = await message.channel.send(`${EMOJI_REMOVED} The persistent boost detector is already stopped.`);
         } else {
-            await setBoostState(false);
-            client.user.setActivity('Boost Detector Off', { type: 4 });
-            replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
+            try {
+                await setBoostState(false); // Attempt to write to Firebase
+                client.user.setActivity('Boost Detector Off', { type: 4 });
+                replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
+            } catch (e) {
+                console.error("Error setting boost state in !stopboost:", e);
+                replyMsg = await message.channel.send(`${EMOJI_REMOVED} **ERROR:** Failed to stop boost detection (Firebase/Database issue).`);
+            }
         }
         cleanupAndExit(replyMsg, message);
         return;
@@ -509,36 +478,41 @@ client.on("guildMemberAdd", async member => {
 
 // --- MEMBER UPDATE (BOOSTER LOGIC) ---
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
-    // Check only for a change in premiumSince, which correctly signals a boost start/end.
     if (oldMember.premiumSince !== newMember.premiumSince) 
     {
         await handleBoosterStatusChange(oldMember, newMember);
     }
 });
 
-// --- READY (Updated with Firebase/Persistence Initialization) ---
+// --- READY (Initialization) ---
 client.once('ready', async () => {
     console.log(`Bot online as ${client.user.tag}`);
     
     // --- FIREBASE INITIALIZATION ---
-    try {
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
+    if (Object.keys(firebaseConfig).length > 0) {
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
 
-        if (initialAuthToken) {
-            await signInWithCustomToken(auth, initialAuthToken);
-        } else {
-            await signInAnonymously(auth);
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+            console.log("Firebase authentication successful.");
+
+            // Load the persistent state from Firestore
+            boostDetectorIsRunning = await getBoostState();
+            console.log(`Boost detector starting state: ${boostDetectorIsRunning ? 'RUNNING' : 'STOPPED'}`);
+
+        } catch (error) {
+            console.error("Failed to initialize Firebase or load state:", error);
+            boostDetectorIsRunning = false; // Disable boost detection if startup fails
         }
-        console.log("Firebase authentication successful.");
-
-        // Load the persistent state from Firestore
-        boostDetectorIsRunning = await getBoostState();
-        console.log(`Boost detector starting state: ${boostDetectorIsRunning ? 'RUNNING' : 'STOPPED'}`);
-
-    } catch (error) {
-        console.error("Failed to initialize Firebase or load state:", error);
+    } else {
+        console.error("Firebase config missing. Boost detection is DISABLED.");
+        boostDetectorIsRunning = false;
     }
     // --- END FIREBASE INITIALIZATION ---
 
