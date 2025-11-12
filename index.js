@@ -273,6 +273,7 @@ async function handleBoosterStatusChange(oldMember, newMember) {
 
     if (!boosterRole || !communityChannel || !loungeChannel) {
         console.error("[ERROR] Booster config missing (role/channels).");
+        // We still continue to handle the status change even if some channels/roles are missing
     }
 
     const isBoosting = newMember.premiumSince;
@@ -328,7 +329,8 @@ async function handleBoosterStatusChange(oldMember, newMember) {
 // --- ROLES PANEL & INTERACTIONS (Unchanged) ---
 async function createRolesPanel(message) {
     if (!rolesConfig || Object.keys(rolesConfig).length === 0) {
-        return message.channel.send("Error: roles.json is empty!").then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        const msg = await message.channel.send("Error: roles.json is empty!");
+        return msg; // Return for cleanup
     }
 
     const embed = new EmbedBuilder()
@@ -360,11 +362,10 @@ async function createRolesPanel(message) {
     try {
         const sentMessage = await message.channel.send({ embeds: [embed], components: [row] });
         console.log("[DEBUG] Roles panel sent successfully.");
-        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
-            setTimeout(() => message.delete().catch(() => {}), 5000);
-        }
+        return sentMessage; // Return for cleanup
     } catch (err) {
         console.error("[ERROR] Failed to send roles panel:", err);
+        return null;
     }
 }
 
@@ -400,10 +401,11 @@ async function sendWelcomeMessage(member, channel = null) {
             .setEmoji(handbookEmoji)
     );
 
-    await targetChannel.send({
+    const sentMsg = await targetChannel.send({
         embeds: [embed],
         components: [row]
     });
+    return sentMsg;
 }
 
 client.on('interactionCreate', async interaction => {
@@ -482,6 +484,25 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// --- HELPER FUNCTION FOR COMMAND CLEANUP ---
+/**
+ * Deletes the bot's response and the user's command message after a delay.
+ * @param {import('discord.js').Message} botMessage The bot's reply message.
+ * @param {import('discord.js').Message} userMessage The user's command message.
+ */
+const cleanupAndExit = async (botMessage, userMessage) => {
+    // Wait 5 seconds
+    await new Promise(r => setTimeout(r, 5000));
+    // Attempt to delete the bot's message
+    if (botMessage && !botMessage.deleted) {
+        await botMessage.delete().catch(() => {});
+    }
+    // Attempt to delete the user's command message
+    if (userMessage && !userMessage.deleted) {
+        await userMessage.delete().catch(() => {});
+    }
+};
+
 // --- COMMANDS ---
 client.on('messageCreate', async message => {
     // 1. Basic checks
@@ -504,79 +525,95 @@ client.on('messageCreate', async message => {
     // 4. Permission Check & Handle Unauthorized Access
     if (authorizedCommands.includes(command) && !isAuthorized) {
         const reply = await message.reply("You do not have permission to use this command.");
-        setTimeout(() => reply.delete().catch(() => {}), 5000);
+        // We still use cleanup here, but only for the reply/command message.
+        cleanupAndExit(reply, message);
         return; 
     }
 
-    // 5. Delete the User's Command Message (Only runs if authorized or command doesn't require auth)
-    try {
-        if (message.channel.permissionsFor(client.user).has('ManageMessages')) {
-            await message.delete().catch(() => {});
-        } else {
-            setTimeout(() => message.delete().catch(() => {}), 5000);
-        }
-    } catch (e) {
-        // ignore deletion errors
-    }
+    // NOTE: The message deletion block (Step 5) was removed here to fix command execution.
+    // Cleanup is now handled at the end of each authorized command's successful execution.
 
     // --- Command Execution ---
 
     // Standard commands
     if (command === 'roles') {
-        await createRolesPanel(message);
+        const sentMsg = await createRolesPanel(message);
+        cleanupAndExit(sentMsg, message); // Cleanup the user's command
         return;
     }
 
     if (command === "welcomeadalea") {
-        if (isWelcomerActive) return message.channel.send(`${orangeFlower} **Welcomer is already active.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
-        isWelcomerActive = true;
-        return message.channel.send(`${orangeFlower} **Starting... Welcomer activated.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+        let replyMsg;
+        if (isWelcomerActive) {
+            replyMsg = await message.channel.send(`${orangeFlower} **Welcomer is already active.**`);
+        } else {
+            isWelcomerActive = true;
+            replyMsg = await message.channel.send(`${orangeFlower} **Starting... Welcomer activated.**`);
+        }
+        cleanupAndExit(replyMsg, message);
+        return;
     }
 
     if (command === "stopwelcomeadalea") {
-        if (!isWelcomerActive) return message.channel.send(`${orangeFlower} **Welcomer is already inactive.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
-        isWelcomerActive = false;
-        return message.channel.send(`${orangeFlower} **Stopping... Welcomer deactivated.**`).then(msg => setTimeout(() => msg.delete().catch(() => {}),5000));
+        let replyMsg;
+        if (!isWelcomerActive) {
+            replyMsg = await message.channel.send(`${orangeFlower} **Welcomer is already inactive.**`);
+        } else {
+            isWelcomerActive = false;
+            replyMsg = await message.channel.send(`${orangeFlower} **Stopping... Welcomer deactivated.**`);
+        }
+        cleanupAndExit(replyMsg, message);
+        return;
     }
 
     if (command === "testwelcome") {
+        // testwelcome sends multiple messages, so we only clean up the initial command message.
         await sendWelcomeMessage(message.member, message.channel);
+        await message.delete().catch(() => {});
         return;
     }
 
     if (command === "restart") {
         const sentMsg = await message.channel.send("Restarting... please stay on stand by");
+        // Don't wait 5s for cleanup, just delete the command immediately and exit
+        await message.delete().catch(() => {});
+        // The bot's message is left up for the 5s, as originally intended.
         setTimeout(() => sentMsg.delete().catch(() => {}), 5000); 
         process.exit(1);
     }
     
-    // --- BOOST DETECTOR COMMANDS ---
+    // --- BOOST DETECTOR COMMANDS (FIXED) ---
     if (command === 'startboosts') {
+        let replyMsg;
         if (boostDetectorIsRunning) {
-            return message.channel.send(`${EMOJI_ADDED} The persistent boost detector is already running.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+            replyMsg = await message.channel.send(`${EMOJI_ADDED} The persistent boost detector is already running.`);
+        } else {
+            await setBoostState(true);
+            client.user.setActivity('Watching for Boosts', { type: 4 });
+            replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
         }
-        await setBoostState(true);
-        client.user.setActivity('Watching for Boosts', { type: 4 });
-        // Use EMOJI_ADDED for success
-        message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        cleanupAndExit(replyMsg, message);
         return;
     }
 
     if (command === 'stopboost') {
+        let replyMsg;
         if (!boostDetectorIsRunning) {
-            return message.channel.send(`${EMOJI_REMOVED} The persistent boost detector is already stopped.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+            replyMsg = await message.channel.send(`${EMOJI_REMOVED} The persistent boost detector is already stopped.`);
+        } else {
+            await setBoostState(false);
+            client.user.setActivity('Boost Detector Off', { type: 4 });
+            replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
         }
-        await setBoostState(false);
-        client.user.setActivity('Boost Detector Off', { type: 4 });
-        // Use EMOJI_REMOVED for stopping
-        message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`).then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        cleanupAndExit(replyMsg, message);
         return;
     }
 
     if (command === 'checkbooststate') { 
         const statusEmoji = boostDetectorIsRunning ? EMOJI_ADDED : EMOJI_REMOVED;
         const statusText = boostDetectorIsRunning ? 'RUNNING' : 'STOPPED';
-        message.channel.send(`${statusEmoji} The persistent boost detector is currently **${statusText}**.`);
+        const replyMsg = await message.channel.send(`${statusEmoji} The persistent boost detector is currently **${statusText}**.`);
+        cleanupAndExit(replyMsg, message);
         return;
     }
 });
@@ -586,10 +623,10 @@ client.on("guildMemberAdd", async member => {
     if (isWelcomerActive) sendWelcomeMessage(member);
 });
 
-// --- MEMBER UPDATE (BOOSTER LOGIC) ---
+// --- MEMBER UPDATE (BOOSTER LOGIC - FIXED CHECK) ---
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
-    if (oldMember.premiumSince !== newMember.premiumSince || 
-        !oldMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID) !== !newMember.roles.cache.has(SERVER_BOOSTER_ROLE_ID)) 
+    // Check only for a change in premiumSince, which correctly signals a boost start/end.
+    if (oldMember.premiumSince !== newMember.premiumSince) 
     {
         await handleBoosterStatusChange(oldMember, newMember);
     }
@@ -630,5 +667,3 @@ http.createServer((req,res)=>{res.writeHead(200);res.end('Alive');}).listen(proc
 
 // --- LOGIN ---
 client.login(process.env.BOT_TOKEN);
-
-
