@@ -121,10 +121,11 @@ async function setBoostState(status) {
     try {
         const docRef = getStatusDocRef();
         await setDoc(docRef, { isRunning: status }, { merge: true });
-        boostDetectorIsRunning = status; 
-        console.log(`Boost detection state updated to: ${status}`);
+        // NOTE: We rely on the command handler to update the local global state 
+        // immediately after a successful write to prevent race conditions.
     } catch (error) {
         console.error("Error setting boost state in Firestore:", error);
+        throw error; // Re-throw the error so the command handler can catch it
     }
 }
 
@@ -365,10 +366,10 @@ client.on('messageCreate', async message => {
     const isSpecial = message.author.id === SPECIAL_USER_ID;
     const isAuthorized = hasRole || isSpecial;
 
-    // NOTE: All boost commands are singular: startboost, stopboost
+    // NOTE: All boost commands are singular: startboost, stopboost, testboost
     const authorizedCommands = [
         "roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "restart",
-        "startboost", "stopboost", "checkbooststate", "testboost" // <-- ADDED
+        "startboost", "stopboost", "checkbooststate", "testboost" 
     ];
 
     if (authorizedCommands.includes(command) && !isAuthorized) {
@@ -423,13 +424,14 @@ client.on('messageCreate', async message => {
     }
     
     // --- BOOST DETECTOR COMMANDS ---
-    if (command === 'startboost') { // Singular command name
+    if (command === 'startboost') { 
         let replyMsg;
         if (boostDetectorIsRunning) {
             replyMsg = await message.channel.send(`${EMOJI_ADDED} The persistent boost detector is already running.`);
         } else {
             try {
-                await setBoostState(true); // Attempt to write to Firebase
+                await setBoostState(true); // 1. Writes 'true' to Firebase
+                boostDetectorIsRunning = true; // 2. ***IMMEDIATE LOCAL UPDATE FIX***
                 replyMsg = await message.channel.send(`${EMOJI_ADDED} Boost detection has been **STARTED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !startboost:", e);
@@ -440,13 +442,14 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    if (command === 'stopboost') { // Singular command name
+    if (command === 'stopboost') { 
         let replyMsg;
         if (!boostDetectorIsRunning) { 
             replyMsg = await message.channel.send(`${EMOJI_REMOVED} The persistent boost detector is already stopped.`);
         } else {
             try {
-                await setBoostState(false); // Attempt to write to Firebase
+                await setBoostState(false); // 1. Writes 'false' to Firebase
+                boostDetectorIsRunning = false; // 2. ***IMMEDIATE LOCAL UPDATE FIX***
                 replyMsg = await message.channel.send(`${EMOJI_REMOVED} Boost detection has been **STOPPED** and is now persistent across restarts.`);
             } catch (e) {
                 console.error("Error setting boost state in !stopboost:", e);
@@ -458,18 +461,22 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'checkbooststate') { 
-        const statusEmoji = boostDetectorIsRunning ? EMOJI_ADDED : EMOJI_REMOVED;
-        const statusText = boostDetectorIsRunning ? 'RUNNING' : 'STOPPED';
-        const replyMsg = await message.channel.send(`${statusEmoji} The persistent boost detector is currently **${statusText}**.`);
+        // Read directly from Firebase for the most reliable status check
+        const firebaseStatus = await getBoostState(); 
+        boostDetectorIsRunning = firebaseStatus; // Sync the local state after the check
+        
+        const statusEmoji = firebaseStatus ? EMOJI_ADDED : EMOJI_REMOVED;
+        const statusText = firebaseStatus ? 'RUNNING' : 'STOPPED';
+        const replyMsg = await message.channel.send(`${statusEmoji} The persistent boost detector (read directly from Firebase) is currently **${statusText}**.`);
         cleanupAndExit(replyMsg, message);
         return;
     }
 
-    // --- NEW: Test Boost Command ---
+    // --- Test Boost Command ---
     if (command === 'testboost') {
         let replyMsg;
-        if (boostDetectorIsRunning) {
-            // Check current boost count (or default to 0 for a test)
+        // Check the local variable which was updated in !startboost
+        if (boostDetectorIsRunning) { 
             const boostCount = message.guild.premiumSubscriptionCount || 0; 
             const text = `TEST: ${message.member.user.username} just boosted the server! That brings us to ${boostCount} total boosts! Thank you, ${message.member.user.username}! (This is a test announcement)`;
             
@@ -481,7 +488,6 @@ client.on('messageCreate', async message => {
         cleanupAndExit(replyMsg, message);
         return;
     }
-    // --- END NEW COMMAND ---
 });
 
 // --- MEMBER JOIN ---
