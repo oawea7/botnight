@@ -34,8 +34,9 @@ const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
-// ✅ ROLES EMBED IMAGE URL (Permanent/Non-expiring)
+// ✅ ROLES EMBED IMAGE (Your requested image)
 const rolesEmbedImage = "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png"; 
+// ✅ WELCOME EMBED IMAGE (Restored to its original value)
 const welcomeEmbedImage = "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png";
 
 
@@ -56,10 +57,10 @@ async function loadRolesConfig() {
   try {
     rolesConfig = await fs.readJson(ROLES_FILE);
     
-    // ✅ FIXED: Check for user's keys (PINGS_ROLES and SHIFTS_ROLES)
+    // ✅ FIXED: Ensure role arrays exist with user's specific keys
     if (!rolesConfig.PRONOUN_ROLES) rolesConfig.PRONOUN_ROLES = [];
-    if (!rolesConfig.PINGS_ROLES) rolesConfig.PINGS_ROLES = [];
-    if (!rolesConfig.SHIFTS_ROLES) rolesConfig.SHIFTS_ROLES = [];
+    if (!rolesConfig.PINGS_ROLES) rolesConfig.PINGS_ROLES = []; 
+    if (!rolesConfig.SHIFTS_ROLES) rolesConfig.SHIFTS_ROLES = []; 
 
     // Auto-add "Any" pronoun role if missing
     const anyExists = rolesConfig.PRONOUN_ROLES.some(
@@ -89,7 +90,7 @@ async function sendBoostThankYou(member, channel = null) {
     const embed = new EmbedBuilder()
       .setTitle("Thank you for boosting! <:Booster:1424080874890072205>")
       .setDescription(
-        `Thank thank you, <@${member.id}>! Your support helps our tropical island grow brighter and cozier every day! <:flower:1424840226785988608>`
+        `Thank you, <@${member.id}>! Your support helps our tropical island grow brighter and cozier every day! <:flower:1424840226785988608>`
       )
       .setColor("#FFCC33");
 
@@ -131,7 +132,7 @@ async function createRolesPanel(message) {
       .setDescription(
         `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
       )
-      // ✅ USING THE CORRECT NON-EXPIRING IMAGE CONSTANT
+      // ✅ IMAGE FIX CONFIRMED: Using your requested image for the roles embed
       .setImage(rolesEmbedImage) 
       .setColor(rolesConfig.EMBED_COLOR || "#FFCC33"); 
 
@@ -184,7 +185,8 @@ async function sendWelcomeMessage(member, channel = null) {
           `Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\n` +
           `Please make sure to review the <#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
       )
-      .setImage(welcomeEmbedImage)
+      // ✅ RESTORED: Using the original welcome embed image
+      .setImage(welcomeEmbedImage) 
       .setFooter({
         text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}`,
       })
@@ -358,7 +360,7 @@ client.on("interactionCreate", async (interaction) => {
           .setValue(role.roleId)
           .setDefault(memberRoles.has(role.roleId)); 
         
-        // ✅ Crash Fix: Only call setEmoji if role.emoji is defined.
+        // ✅ Crash Fix: Only call setEmoji if role.emoji is defined. This prevents the crash for all roles.
         if (role.emoji) {
             option.setEmoji(role.emoji);
         }
