@@ -18,6 +18,9 @@ const LEADERSHIP_ROLE_ID = "1402400285674049576";
 const SPECIAL_USER_ID = "1107787991444881408";
 const ROLES_FILE = "roles.json";
 
+let rolesConfig = {};
+let isWelcomerActive = false; // Welcomer status defaults to false
+
 // Channels & Roles IDs
 const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Also WELCOME_CHANNEL_ID
 const BOOSTER_LOUNGE_CHANNEL_ID = "1414381377389858908";
@@ -34,17 +37,14 @@ const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
-// Roles Panel Image URLs
-const rolesEmbedImage = "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png"; 
+// Welcome Embed Image URL (Still hardcoded as it's not part of roles.json config)
 const welcomeEmbedImage = "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png";
 
-// ✅ FINAL BUTTON EMOJI CONSTANTS (Using the IDs you provided)
+// FINAL BUTTON EMOJI CONSTANTS (IDs you provided)
 const PRONOUNS_EMOJI_ID = '1438666085737041981'; // <:f_flowerred:>
 const PINGS_EMOJI_ID = '1438666045203284102';     // <:f_flowerwhite:>
 const SESSIONS_EMOJI_ID = '1438665987145728051';  // <:f_floweryellow:>
 
-
-let rolesConfig = {};
 
 // ─── CLIENT ────────────────────────────────────────────────
 const client = new Client({
@@ -61,10 +61,10 @@ async function loadRolesConfig() {
   try {
     rolesConfig = await fs.readJson(ROLES_FILE);
     
-    // Ensure role arrays exist with user's specific keys
-    if (!rolesConfig.PRONOUN_ROLES) rolesConfig.PRONOUN_ROLES = [];
-    if (!rolesConfig.PINGS_ROLES) rolesConfig.PINGS_ROLES = []; 
-    if (!rolesConfig.SHIFTS_ROLES) rolesConfig.SHIFTS_ROLES = []; 
+    // ✅ FIX 1: Ensure all three role arrays exist in the config
+    if (!Array.isArray(rolesConfig.PRONOUN_ROLES)) rolesConfig.PRONOUN_ROLES = [];
+    if (!Array.isArray(rolesConfig.PINGS_ROLES)) rolesConfig.PINGS_ROLES = []; 
+    if (!Array.isArray(rolesConfig.SHIFTS_ROLES)) rolesConfig.SHIFTS_ROLES = []; 
 
     // Auto-add "Any" pronoun role if missing
     const anyExists = rolesConfig.PRONOUN_ROLES.some(
@@ -75,15 +75,17 @@ async function loadRolesConfig() {
         label: "Any",
         roleId: "1402704905264697374",
       });
+      console.log("[DEBUG] Added pronoun role 'Any' to rolesConfig.");
     }
     console.log("[DEBUG] Roles config loaded successfully.");
   } catch (err) {
+    // This catches the 'Error: No roles config loaded.' from IMG_5466.jpeg
     console.error(`[ERROR] Failed to load ${ROLES_FILE}. Check file existence and JSON format:`, err.message);
     rolesConfig = {}; // Set to empty object to prevent downstream errors
   }
 }
 
-// ─── BOOST FUNCTIONS ───────────────────────────────────────
+// ─── BOOST FUNCTIONS (No changes needed) ───────────────────
 async function sendBoostThankYou(member, channel = null) {
   try {
     const targetChannel = channel || member.guild.channels.cache.get(COMMUNITY_CHANNEL_ID);
@@ -125,9 +127,10 @@ async function sendBoosterLoungeWelcome(member, channel = null) {
 // ─── ROLES PANEL ───────────────────────────────────────────
 async function createRolesPanel(message) {
   try {
-    if (!rolesConfig || Object.keys(rolesConfig).length === 0 || !rolesConfig.EMBED_TITLE_EMOJI) {
+    // Check if essential config fields are present (Fix for IMG_5466.jpeg)
+    if (!rolesConfig || Object.keys(rolesConfig).length === 0 || !rolesConfig.EMBED_TITLE_EMOJI || !rolesConfig.ROLES_PANEL_IMAGE) {
       return message.channel
-        .send(`Error: No roles config loaded. Cannot send roles panel.`)
+        .send(`Error: No roles config loaded or required fields (EMBED_TITLE_EMOJI, ROLES_PANEL_IMAGE) are missing in roles.json.`)
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
     
@@ -136,7 +139,8 @@ async function createRolesPanel(message) {
       .setDescription(
         `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
       )
-      .setImage(rolesEmbedImage) 
+      // ✅ FIX 2: Correctly using ROLES_PANEL_IMAGE key from rolesConfig
+      .setImage(rolesConfig.ROLES_PANEL_IMAGE) 
       .setColor(rolesConfig.EMBED_COLOR || "#FFCC33"); 
 
     const row = new ActionRowBuilder().addComponents(
@@ -144,27 +148,29 @@ async function createRolesPanel(message) {
         .setCustomId("roles_pronouns")
         .setLabel("Pronouns")
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji({ id: PRONOUNS_EMOJI_ID }), // ✅ Red Flower
+        .setEmoji({ id: PRONOUNS_EMOJI_ID }), // Red Flower
       new ButtonBuilder()
         .setCustomId("roles_pings")
         .setLabel("Pings")
         .setStyle(ButtonStyle.Primary)
-        .setEmoji({ id: PINGS_EMOJI_ID }), // ✅ White Flower
+        .setEmoji({ id: PINGS_EMOJI_ID }), // White Flower
       new ButtonBuilder()
         .setCustomId("roles_sessions")
         .setLabel("Sessions")
         .setStyle(ButtonStyle.Success)
-        .setEmoji({ id: SESSIONS_EMOJI_ID }) // ✅ Yellow Flower
+        .setEmoji({ id: SESSIONS_EMOJI_ID }) // Yellow Flower
     );
 
     await message.channel.send({ embeds: [embed], components: [row] });
     console.log("[DEBUG] Roles panel sent successfully.");
   } catch (err) {
     console.error("[ERROR] Failed to send roles panel message or components:", err);
+    // Send a public error message if the send fails
+    await message.channel.send("A critical error occurred while creating the roles panel. Check bot logs.").catch(() => {});
   }
 }
 
-// ─── WELCOME MESSAGE ───────────────────────────────────────
+// ─── WELCOME MESSAGE (No changes needed) ───────────────────
 async function sendWelcomeMessage(member, channel = null) {
   try {
     const targetChannel = member.guild.channels.cache.get(COMMUNITY_CHANNEL_ID);
@@ -172,7 +178,6 @@ async function sendWelcomeMessage(member, channel = null) {
 
     const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
 
-    // Send the mention first
     await targetChannel.send(`Welcome, ${member}!`);
 
     const embed = new EmbedBuilder()
@@ -207,7 +212,7 @@ async function sendWelcomeMessage(member, channel = null) {
   }
 }
 
-// ─── MEMBER UPDATE (BOOST HANDLER) ─────────────────────────
+// ─── MEMBER UPDATE (BOOST HANDLER - No changes needed) ─────
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
   try {
     const oldBoost = oldMember.premiumSince;
@@ -265,6 +270,8 @@ client.on("messageCreate", async (message) => {
       "roles",
       "testwelcome",
       "testboost",
+      "welcomeadalea", // Added
+      "stopwelcomeadalea" // Added
     ];
 
     // Check permissions only for the required commands
@@ -273,7 +280,7 @@ client.on("messageCreate", async (message) => {
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
     
-    // Attempt to delete the command message immediately
+    // ✅ Improved Command Deletion Logic
     if (message.channel.permissionsFor(client.user).has("ManageMessages")) {
         await message.delete().catch(() => {});
     }
@@ -299,6 +306,22 @@ client.on("messageCreate", async (message) => {
         .send(`${EMOJI_ADDED} **Welcome message sent here for testing.**`)
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
+    
+    // ✅ Welcome Toggle Commands
+    if (command === "welcomeadalea") {
+        isWelcomerActive = true;
+        return message.channel
+            .send(`${EMOJI_ADDED} **Adalea Welcomer is now active!**`)
+            .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
+    }
+    
+    if (command === "stopwelcomeadalea") {
+        isWelcomerActive = false;
+        return message.channel
+            .send(`${EMOJI_REMOVED} **Adalea Welcomer is now disabled!**`)
+            .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
+    }
+    
   } catch (e) {
     console.error(`[ERROR] Error processing messageCreate event for command ${message.content}:`, e);
   }
@@ -340,7 +363,7 @@ client.on("interactionCreate", async (interaction) => {
 
       if (!roleList || roleList.length === 0) {
         return interaction.editReply({
-          content: "Error: No roles are configured for this category in `roles.json`.",
+          content: "Error: No roles are configured for this category in `roles.json`. Please contact a moderator.",
         }).catch(console.error);
       }
 
@@ -440,17 +463,19 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
   } catch (e) {
+    // This should catch the "A critical and unexpected error occurred" from IMG_5465.jpeg
     console.error("[ERROR] Critical error processing interactionCreate event:", e);
     if (!interaction.replied) {
-        interaction.editReply({ content: "A critical and unexpected error occurred. Please check the bot logs for details." }).catch(() => {});
+        // Send a specific error message to the user
+        interaction.editReply({ content: "A critical and unexpected error occurred while processing your request. Please check the bot logs for details." }).catch(() => {});
     }
   }
 });
 
-// ─── MEMBER JOIN (ALWAYS WELCOMES) ─────────────────────────
+// ─── MEMBER JOIN (Welcome only if enabled) ─────────────────
 client.on("guildMemberAdd", async (member) => {
   try {
-    sendWelcomeMessage(member);
+    if (isWelcomerActive) sendWelcomeMessage(member);
   } catch (e) {
     console.error(`[ERROR] Error in guildMemberAdd event for ${member.user.tag}:`, e);
   }
