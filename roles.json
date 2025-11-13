@@ -1,5 +1,5 @@
 {
-  "EMBED_TITLE_EMOJI": "<:role:1406695333135650846>",
+  "EMBED_TITLE_EMOJI": "<:flower:1424840226785988608>",
   "EMBED_COLOR": "#FFCC33",
   "ROLES_PANEL_IMAGE": "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png",
   "BUTTON_EMOJIS": {
@@ -9,36 +9,56 @@
   },
   "PRONOUN_ROLES": [
     {
-      "label": "He/Him",
-      "roleId": "1402704797059129307"
+      "label": "He/him",
+      "roleId": "1402704897786511462"
     },
     {
-      "label": "She/Her",
-      "roleId": "1402704780654716104"
+      "label": "She/her",
+      "roleId": "1402704900034527263"
     },
     {
-      "label": "They/Them",
-      "roleId": "1402704810795413554"
+      "label": "They/them",
+      "roleId": "1402704902999769119"
     }
   ],
   "PINGS_ROLES": [
     {
-      "label": "Announcements",
-      "roleId": "1402704875323869263"
+      "label": "Employment",
+      "roleId": "1403445445786734742"
+    },
+    {
+      "label": "Development",
+      "roleId": "1402729341544169604"
+    },
+    {
+      "label": "Alliances",
+      "roleId": "1402729345130303550"
     },
     {
       "label": "Events",
-      "roleId": "1402704860010991669"
+      "roleId": "1402729563586298068"
+    },
+    {
+      "label": "Engagement",
+      "roleId": "1402729345860112469"
+    },
+    {
+      "label": "Awareness",
+      "roleId": "1403023171900280872"
+    },
+    {
+      "label": "Chat Revive",
+      "roleId": "1402729692112486471"
     }
   ],
   "SHIFTS_ROLES": [
     {
-      "label": "Shift Notifications",
-      "roleId": "1402704944445831102"
+      "label": "Trainings",
+      "roleId": "1402729335152185374"
     },
     {
-      "label": "Session Notifications",
-      "roleId": "1402704928099351786"
+      "label": "Shifts",
+      "roleId": "1402729344052232242"
     }
   ]
 }
