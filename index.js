@@ -33,7 +33,10 @@ const orangeFlower = "<:orangeflower:1436795365172052018>";
 const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
-const rolesEmbedImage = "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png";
+
+// ✅ ROLES EMBED IMAGE URL (Permanent/Non-expiring)
+const rolesEmbedImage = "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png"; 
+const welcomeEmbedImage = "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png";
 
 
 let rolesConfig = {};
@@ -53,7 +56,7 @@ async function loadRolesConfig() {
   try {
     rolesConfig = await fs.readJson(ROLES_FILE);
     
-    // ⚠️ FIXED: Check for user's keys (PINGS_ROLES and SHIFTS_ROLES)
+    // ✅ FIXED: Check for user's keys (PINGS_ROLES and SHIFTS_ROLES)
     if (!rolesConfig.PRONOUN_ROLES) rolesConfig.PRONOUN_ROLES = [];
     if (!rolesConfig.PINGS_ROLES) rolesConfig.PINGS_ROLES = [];
     if (!rolesConfig.SHIFTS_ROLES) rolesConfig.SHIFTS_ROLES = [];
@@ -86,7 +89,7 @@ async function sendBoostThankYou(member, channel = null) {
     const embed = new EmbedBuilder()
       .setTitle("Thank you for boosting! <:Booster:1424080874890072205>")
       .setDescription(
-        `Thank you, <@${member.id}>! Your support helps our tropical island grow brighter and cozier every day! <:flower:1424840226785988608>`
+        `Thank thank you, <@${member.id}>! Your support helps our tropical island grow brighter and cozier every day! <:flower:1424840226785988608>`
       )
       .setColor("#FFCC33");
 
@@ -128,8 +131,9 @@ async function createRolesPanel(message) {
       .setDescription(
         `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
       )
-      .setImage(rolesEmbedImage)
-      .setColor(rolesConfig.EMBED_COLOR || "#FFCC33"); // Use default color if config fails
+      // ✅ USING THE CORRECT NON-EXPIRING IMAGE CONSTANT
+      .setImage(rolesEmbedImage) 
+      .setColor(rolesConfig.EMBED_COLOR || "#FFCC33"); 
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -165,7 +169,6 @@ async function createRolesPanel(message) {
 // ─── WELCOME MESSAGE ───────────────────────────────────────
 async function sendWelcomeMessage(member, channel = null) {
   try {
-    // Note: Welcome messages are sent to COMMUNITY_CHANNEL_ID (1402405984978341888)
     const targetChannel = member.guild.channels.cache.get(COMMUNITY_CHANNEL_ID);
     if (!targetChannel) return console.error(`[ERROR] Welcome Channel ${COMMUNITY_CHANNEL_ID} not found.`);
 
@@ -181,9 +184,7 @@ async function sendWelcomeMessage(member, channel = null) {
           `Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\n` +
           `Please make sure to review the <#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
       )
-      .setImage(
-        "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png"
-      )
+      .setImage(welcomeEmbedImage)
       .setFooter({
         text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}`,
       })
@@ -324,14 +325,14 @@ client.on("interactionCreate", async (interaction) => {
           menuCustomId = "select_pronouns";
           break;
           
-        // ⚠️ FIXED: Using PINGS_ROLES from user's roles.json
+        // ✅ Key Mismatch Fix
         case "roles_pings":
           roleList = rolesConfig.PINGS_ROLES; 
           menuPlaceholder = "Select your ping roles";
           menuCustomId = "select_pings";
           break;
           
-        // ⚠️ FIXED: Using SHIFTS_ROLES from user's roles.json
+        // ✅ Key Mismatch Fix
         case "roles_sessions":
           roleList = rolesConfig.SHIFTS_ROLES; 
           menuPlaceholder = "Select your session roles";
@@ -350,14 +351,19 @@ client.on("interactionCreate", async (interaction) => {
       const memberRoles = interaction.member.roles.cache;
 
       const options = roleList.map((role) => {
-        // Ensure roleId exists before using it
         if (!role.roleId) return null; 
 
-        return new StringSelectMenuOptionBuilder()
+        let option = new StringSelectMenuOptionBuilder()
           .setLabel(role.label || "No Label")
           .setValue(role.roleId)
-          .setEmoji(role.emoji || undefined)
           .setDefault(memberRoles.has(role.roleId)); 
+        
+        // ✅ Crash Fix: Only call setEmoji if role.emoji is defined.
+        if (role.emoji) {
+            option.setEmoji(role.emoji);
+        }
+        
+        return option;
       }).filter(o => o !== null); // Remove null entries
 
       const selectMenu = new StringSelectMenuBuilder()
@@ -382,12 +388,12 @@ client.on("interactionCreate", async (interaction) => {
           roleList = rolesConfig.PRONOUN_ROLES;
           break;
           
-        // ⚠️ FIXED: Using PINGS_ROLES from user's roles.json
+        // ✅ Key Mismatch Fix
         case "select_pings":
           roleList = rolesConfig.PINGS_ROLES;
           break;
           
-        // ⚠️ FIXED: Using SHIFTS_ROLES from user's roles.json
+        // ✅ Key Mismatch Fix
         case "select_sessions":
           roleList = rolesConfig.SHIFTS_ROLES;
           break;
