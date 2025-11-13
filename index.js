@@ -5,8 +5,8 @@ const {
   ButtonBuilder,
   ActionRowBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder, // <-- NEW: Added for dropdowns
-  StringSelectMenuOptionBuilder, // <-- NEW: Added for dropdown options
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
 } = require("discord.js");
 const fs = require("fs-extra");
 const http = require("http");
@@ -116,7 +116,6 @@ async function createRolesPanel(message) {
       .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
   }
 
-  // Define the new permanent image URL
   const rolesEmbedImage = "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png";
 
   const embed = new EmbedBuilder()
@@ -124,7 +123,7 @@ async function createRolesPanel(message) {
     .setDescription(
       `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
     )
-    .setImage(rolesEmbedImage) // <-- FIX: Set to the new image URL
+    .setImage(rolesEmbedImage)
     .setColor(rolesConfig.EMBED_COLOR);
 
   const row = new ActionRowBuilder().addComponents(
@@ -261,11 +260,11 @@ client.on("messageCreate", async (message) => {
   const isSpecial = message.author.id === SPECIAL_USER_ID;
   const isPermitted = hasRole || isSpecial;
 
+  // UPDATED: Only these commands are restricted
   const restrictedCommands = [
     "roles",
     "testwelcome",
     "testboost",
-    "restart",
   ];
 
   if (!isPermitted && restrictedCommands.includes(command)) {
@@ -303,12 +302,10 @@ client.on("messageCreate", async (message) => {
       .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
   }
 
-  if (command === "restart") {
-    await message.channel.send("Restarting bot...").then(() => process.exit(1)); 
-  }
+  // REMOVED !restart command handler
 });
 
-// ─── [NEW] INTERACTION HANDLER ─────────────────────────────
+// ─── INTERACTION HANDLER ──────────────────────────────────
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
     // --- BUTTON CLICK ---
