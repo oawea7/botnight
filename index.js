@@ -5,8 +5,6 @@ const {
   ButtonBuilder,
   ActionRowBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder
 } = require("discord.js");
 const fs = require("fs-extra");
 const http = require("http");
@@ -19,17 +17,14 @@ const SPECIAL_USER_ID = "1107787991444881408";
 const ROLES_FILE = "roles.json";
 
 let rolesConfig = {};
-let isWelcomerActive = false;
 
 // ─── BOOST CONSTANTS ───────────────────────────────────────
-const GUILD_ID = "1402400197040013322";
 const COMMUNITY_CHANNEL_ID = "1402405984978341888";
 const BOOSTER_LOUNGE_CHANNEL_ID = "1414381377389858908";
 const SERVER_BOOSTER_ROLE_ID = "1404242033849270272";
 
 // ─── EMOJIS ────────────────────────────────────────────────
 const EMOJI_ADDED = "<a:Zcheck:1437064263570292906>";
-const EMOJI_REMOVED = "<a:Zx_:1437064220876472370>";
 const orangeFlower = "<:orangeflower:1436795365172052018>";
 const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
@@ -47,8 +42,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 // ─── LOAD ROLES CONFIG ─────────────────────────────────────
@@ -57,18 +52,16 @@ async function loadRolesConfig() {
     rolesConfig = await fs.readJson(ROLES_FILE);
     if (!Array.isArray(rolesConfig.PRONOUN_ROLES))
       rolesConfig.PRONOUN_ROLES = [];
-
     const anyExists = rolesConfig.PRONOUN_ROLES.some(
       (r) => r.roleId === "1402704905264697374"
     );
     if (!anyExists) {
       rolesConfig.PRONOUN_ROLES.push({
         label: "Any",
-        roleId: "1402704905264697374"
+        roleId: "1402704905264697374",
       });
       console.log("[DEBUG] Added pronoun role 'Any' to rolesConfig.");
     }
-
     console.log("[DEBUG] Roles loaded successfully.");
   } catch (err) {
     console.error("[ERROR] Failed to load roles.json:", err);
@@ -135,7 +128,7 @@ async function createRolesPanel(message) {
           (rolesConfig.BUTTON_EMOJIS &&
             rolesConfig.BUTTON_EMOJIS.pronoun &&
             (rolesConfig.BUTTON_EMOJIS.pronoun.match(/\d+/) || [])[0]) ||
-          null
+          null,
       }),
     new ButtonBuilder()
       .setCustomId("roles_pings")
@@ -146,7 +139,7 @@ async function createRolesPanel(message) {
           (rolesConfig.BUTTON_EMOJIS &&
             rolesConfig.BUTTON_EMOJIS.pings &&
             (rolesConfig.BUTTON_EMOJIS.pings.match(/\d+/) || [])[0]) ||
-          null
+          null,
       }),
     new ButtonBuilder()
       .setCustomId("roles_sessions")
@@ -157,16 +150,13 @@ async function createRolesPanel(message) {
           (rolesConfig.BUTTON_EMOJIS &&
             rolesConfig.BUTTON_EMOJIS.shifts &&
             (rolesConfig.BUTTON_EMOJIS.shifts.match(/\d+/) || [])[0]) ||
-          null
+          null,
       })
   );
 
   try {
     await message.channel.send({ embeds: [embed], components: [row] });
     console.log("[DEBUG] Roles panel sent successfully.");
-    if (message.channel.permissionsFor(client.user).has("ManageMessages")) {
-      setTimeout(() => message.delete().catch(() => {}), 5000);
-    }
   } catch (err) {
     console.error("[ERROR] Failed to send roles panel:", err);
   }
@@ -174,10 +164,12 @@ async function createRolesPanel(message) {
 
 // ─── WELCOME MESSAGE ───────────────────────────────────────
 async function sendWelcomeMessage(member, channel = null) {
-  const targetChannel = channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+  const targetChannel =
+    channel || member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
   if (!targetChannel) return;
 
   const timeGMT = moment().tz("GMT").format("YYYY-MM-DD HH:mm:ss") + " GMT";
+
   await targetChannel.send(`Welcome, ${member}!`);
 
   const embed = new EmbedBuilder()
@@ -187,8 +179,12 @@ async function sendWelcomeMessage(member, channel = null) {
         `Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\n` +
         `Please make sure to review the <#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
     )
-    .setImage("https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png")
-    .setFooter({ text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}` })
+    .setImage(
+      "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png"
+    )
+    .setFooter({
+      text: `We are now at ${member.guild.memberCount} Discord members | ${timeGMT}`,
+    })
     .setColor("#FFCC33");
 
   const row = new ActionRowBuilder().addComponents(
@@ -213,7 +209,8 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
   const newBoost = newMember.premiumSince;
   const boosterRole = newMember.guild.roles.cache.get(SERVER_BOOSTER_ROLE_ID);
 
-  if (!boosterRole) return console.error("[ERROR] Server Booster Role not found!");
+  if (!boosterRole)
+    return console.error("[ERROR] Server Booster Role not found!");
 
   // BOOST DETECTED
   if (!oldBoost && newBoost) {
@@ -255,19 +252,32 @@ client.on("messageCreate", async (message) => {
   const isSpecial = message.author.id === SPECIAL_USER_ID;
   const isPermitted = hasRole || isSpecial;
 
-  if (!isPermitted && ["roles", "welcomeadalea", "stopwelcomeadalea", "testwelcome", "testboost", "restart"].includes(command)) {
-    return message.reply("You do not have permission to use this command.").then((msg) =>
-      setTimeout(() => msg.delete().catch(() => {}), 5000)
-    );
+  const restrictedCommands = [
+    "roles",
+    "testwelcome",
+    "testboost",
+    "restart",
+  ];
+
+  if (!isPermitted && restrictedCommands.includes(command)) {
+    return message.reply("You do not have permission to use this command.")
+      .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
+  }
+  
+  // Attempt to delete the command message immediately
+  if (message.channel.permissionsFor(client.user).has("ManageMessages")) {
+      await message.delete().catch(() => {});
+  } else {
+      // If no permission, delete after 5 seconds
+      setTimeout(() => message.delete().catch(() => {}), 5000);
   }
 
-  try {
-    if (message.channel.permissionsFor(client.user).has("ManageMessages")) {
-      await message.delete().catch(() => {});
-    } else {
-      setTimeout(() => message.delete().catch(() => {}), 5000);
-    }
-  } catch {}
+  // --- COMMAND HANDLERS ---
+  
+  if (command === "roles") {
+    await createRolesPanel(message);
+    return;
+  }
 
   if (command === "testboost") {
     await sendBoostThankYou(message.member, message.channel);
@@ -276,23 +286,24 @@ client.on("messageCreate", async (message) => {
       .send(`${EMOJI_ADDED} **Boost messages sent here for testing.**`)
       .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
   }
+  
+  if (command === "testwelcome") {
+    await sendWelcomeMessage(message.member, message.channel);
+    return message.channel
+      .send(`${EMOJI_ADDED} **Welcome message sent here for testing.**`)
+      .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
+  }
 
   if (command === "restart") {
-    await message.channel.send("Restarting bot...");
-    try {
-      await client.destroy();
-      await client.login(process.env.BOT_TOKEN);
-      await message.channel.send("Bot restarted successfully.");
-    } catch (e) {
-      console.error("[ERROR] Failed to restart bot:", e);
-      await message.channel.send("Failed to restart bot. Check logs.");
-    }
+    // This is the reliable way to restart a bot in a managed hosting environment
+    await message.channel.send("Restarting bot...").then(() => process.exit(1)); 
   }
 });
 
-// ─── MEMBER JOIN ───────────────────────────────────────────
+// ─── MEMBER JOIN (ALWAYS WELCOMES) ─────────────────────────
 client.on("guildMemberAdd", async (member) => {
-  if (isWelcomerActive) sendWelcomeMessage(member);
+    // Welcomer is now always on, as the toggle commands were removed
+    sendWelcomeMessage(member);
 });
 
 // ─── READY ─────────────────────────────────────────────────
