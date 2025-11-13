@@ -5,6 +5,8 @@ const {
   ButtonBuilder,
   ActionRowBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder, // <-- NEW: Added for dropdowns
+  StringSelectMenuOptionBuilder, // <-- NEW: Added for dropdown options
 } = require("discord.js");
 const fs = require("fs-extra");
 const http = require("http");
@@ -25,6 +27,7 @@ const SERVER_BOOSTER_ROLE_ID = "1404242033849270272";
 
 // ─── EMOJIS ────────────────────────────────────────────────
 const EMOJI_ADDED = "<a:Zcheck:1437064263570292906>";
+const EMOJI_REMOVED = "<a:Zx_:1437064220876472370>";
 const orangeFlower = "<:orangeflower:1436795365172052018>";
 const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
@@ -50,8 +53,11 @@ const client = new Client({
 async function loadRolesConfig() {
   try {
     rolesConfig = await fs.readJson(ROLES_FILE);
-    if (!Array.isArray(rolesConfig.PRONOUN_ROLES))
-      rolesConfig.PRONOUN_ROLES = [];
+    // Ensure role arrays exist
+    if (!rolesConfig.PRONOUN_ROLES) rolesConfig.PRONOUN_ROLES = [];
+    if (!rolesConfig.PING_ROLES) rolesConfig.PING_ROLES = [];
+    if (!rolesConfig.SESSION_ROLES) rolesConfig.SESSION_ROLES = [];
+
     const anyExists = rolesConfig.PRONOUN_ROLES.some(
       (r) => r.roleId === "1402704905264697374"
     );
@@ -110,12 +116,15 @@ async function createRolesPanel(message) {
       .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
   }
 
+  // Define the new permanent image URL
+  const rolesEmbedImage = "https://cdn.discordapp.com/attachments/1402405367056564348/1403446575757398157/nosand.png";
+
   const embed = new EmbedBuilder()
     .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
     .setDescription(
       `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
     )
-    .setImage(rolesConfig.EMBED_IMAGE)
+    .setImage(rolesEmbedImage) // <-- FIX: Set to the new image URL
     .setColor(rolesConfig.EMBED_COLOR);
 
   const row = new ActionRowBuilder().addComponents(
@@ -295,14 +304,137 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "restart") {
-    // This is the reliable way to restart a bot in a managed hosting environment
     await message.channel.send("Restarting bot...").then(() => process.exit(1)); 
+  }
+});
+
+// ─── [NEW] INTERACTION HANDLER ─────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (interaction.isButton()) {
+    // --- BUTTON CLICK ---
+    let roleList, menuPlaceholder, menuCustomId;
+
+    switch (interaction.customId) {
+      case "roles_pronouns":
+        roleList = rolesConfig.PRONOUN_ROLES;
+        menuPlaceholder = "Select your pronouns";
+        menuCustomId = "select_pronouns";
+        break;
+      case "roles_pings":
+        roleList = rolesConfig.PING_ROLES;
+        menuPlaceholder = "Select your ping roles";
+        menuCustomId = "select_pings";
+        break;
+      case "roles_sessions":
+        roleList = rolesConfig.SESSION_ROLES;
+        menuPlaceholder = "Select your session roles";
+        menuCustomId = "select_sessions";
+        break;
+      default:
+        return; // Not a button we care about
+    }
+
+    if (!roleList || roleList.length === 0) {
+      return interaction.reply({
+        content: "Error: No roles are configured for this category.",
+        ephemeral: true,
+      });
+    }
+
+    const memberRoles = interaction.member.roles.cache;
+
+    const options = roleList.map((role) => {
+      return new StringSelectMenuOptionBuilder()
+        .setLabel(role.label)
+        .setValue(role.roleId)
+        .setEmoji(role.emoji || undefined)
+        .setDefault(memberRoles.has(role.roleId)); // Pre-selects if member already has it
+    });
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(menuCustomId)
+      .setPlaceholder(menuPlaceholder)
+      .setMinValues(0) // Allows unselecting all
+      .setMaxValues(options.length)
+      .addOptions(options);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    await interaction.reply({
+      content: "Please select the roles you'd like to have:",
+      components: [row],
+      ephemeral: true, // Only the user who clicked can see this
+    });
+
+  } else if (interaction.isStringSelectMenu()) {
+    // --- SELECT MENU SUBMISSION ---
+    let roleList;
+    switch (interaction.customId) {
+      case "select_pronouns":
+        roleList = rolesConfig.PRONOUN_ROLES;
+        break;
+      case "select_pings":
+        roleList = rolesConfig.PING_ROLES;
+        break;
+      case "select_sessions":
+        roleList = rolesConfig.SESSION_ROLES;
+        break;
+      default:
+        return;
+    }
+
+    if (!roleList) return; // Should not happen
+
+    const member = interaction.member;
+    const selectedRoleIds = interaction.values; // Array of role IDs user selected
+    const memberRoles = member.roles;
+    
+    let addedRoles = [];
+    let removedRoles = [];
+
+    // Loop through all roles in this category
+    for (const role of roleList) {
+      const roleId = role.roleId;
+      const hasRole = memberRoles.cache.has(roleId);
+      const wantsRole = selectedRoleIds.includes(roleId);
+
+      if (wantsRole && !hasRole) {
+        // ADD ROLE
+        try {
+          await memberRoles.add(roleId);
+          addedRoles.push(`<@&${roleId}>`);
+        } catch (e) {
+          console.error(`Failed to add role ${roleId} to ${member.user.tag}`, e);
+        }
+      } else if (!wantsRole && hasRole) {
+        // REMOVE ROLE
+        try {
+          await memberRoles.remove(roleId);
+          removedRoles.push(`<@&${roleId}>`);
+        } catch (e) {
+          console.error(`Failed to remove role ${roleId} from ${member.user.tag}`, e);
+        }
+      }
+    }
+    
+    // Build confirmation message
+    let response = "Your roles have been updated!";
+    if (addedRoles.length > 0) {
+      response += `\n${EMOJI_ADDED} **Added:** ${addedRoles.join(", ")}`;
+    }
+    if (removedRoles.length > 0) {
+      response += `\n${EMOJI_REMOVED} **Removed:** ${removedRoles.join(", ")}`;
+    }
+
+    await interaction.reply({
+      content: response,
+      ephemeral: true,
+    });
   }
 });
 
 // ─── MEMBER JOIN (ALWAYS WELCOMES) ─────────────────────────
 client.on("guildMemberAdd", async (member) => {
-    // Welcomer is now always on, as the toggle commands were removed
     sendWelcomeMessage(member);
 });
 
