@@ -19,7 +19,7 @@ const SPECIAL_USER_ID = "1107787991444881408";
 const ROLES_FILE = "roles.json";
 
 let rolesConfig = {};
-let isWelcomerActive = true; // Set to true by default, as the commands to toggle it are removed
+let isWelcomerActive = true; // Welcomer is set to ACTIVE by default
 
 // Channels & Roles IDs
 const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Also WELCOME_CHANNEL_ID
@@ -37,10 +37,10 @@ const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
-// Welcome Embed Image URL
+// Welcome Embed Image URL (Restored to its original value)
 const welcomeEmbedImage = "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png";
 
-// FINAL BUTTON EMOJI CONSTANTS (IDs you provided)
+// ✅ FINAL BUTTON EMOJI CONSTANTS (IDs you provided)
 const PRONOUNS_EMOJI_ID = '1438666085737041981'; // <:f_flowerred:>
 const PINGS_EMOJI_ID = '1438666045203284102';     // <:f_flowerwhite:>
 const SESSIONS_EMOJI_ID = '1438665987145728051';  // <:f_floweryellow:>
@@ -61,12 +61,12 @@ async function loadRolesConfig() {
   try {
     rolesConfig = await fs.readJson(ROLES_FILE);
     
-    // Ensure all role arrays exist in the config
+    // Fix: Ensure all three role arrays exist in the config to prevent crashes
     if (!Array.isArray(rolesConfig.PRONOUN_ROLES)) rolesConfig.PRONOUN_ROLES = [];
     if (!Array.isArray(rolesConfig.PINGS_ROLES)) rolesConfig.PINGS_ROLES = []; 
     if (!Array.isArray(rolesConfig.SHIFTS_ROLES)) rolesConfig.SHIFTS_ROLES = []; 
 
-    // Auto-add "Any" pronoun role if missing
+    // Auto-add "Any" pronoun role for stability
     const anyExists = rolesConfig.PRONOUN_ROLES.some(
       (r) => r.roleId === "1402704905264697374"
     );
@@ -79,6 +79,7 @@ async function loadRolesConfig() {
     }
     console.log("[DEBUG] Roles config loaded successfully.");
   } catch (err) {
+    // This catches the 'Error: No roles config loaded.'
     console.error(`[ERROR] Failed to load ${ROLES_FILE}. Check file existence and JSON format:`, err.message);
     rolesConfig = {}; 
   }
@@ -137,6 +138,7 @@ async function createRolesPanel(message) {
       .setDescription(
         `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
       )
+      // ✅ USING THE CORRECT KEY FOR THE EMBED IMAGE
       .setImage(rolesConfig.ROLES_PANEL_IMAGE) 
       .setColor(rolesConfig.EMBED_COLOR || "#FFCC33"); 
 
@@ -145,17 +147,17 @@ async function createRolesPanel(message) {
         .setCustomId("roles_pronouns")
         .setLabel("Pronouns")
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji({ id: PRONOUNS_EMOJI_ID }), 
+        .setEmoji({ id: PRONOUNS_EMOJI_ID }), // Red Flower
       new ButtonBuilder()
         .setCustomId("roles_pings")
         .setLabel("Pings")
         .setStyle(ButtonStyle.Primary)
-        .setEmoji({ id: PINGS_EMOJI_ID }), 
+        .setEmoji({ id: PINGS_EMOJI_ID }), // White Flower
       new ButtonBuilder()
         .setCustomId("roles_sessions")
         .setLabel("Sessions")
         .setStyle(ButtonStyle.Success)
-        .setEmoji({ id: SESSIONS_EMOJI_ID }) 
+        .setEmoji({ id: SESSIONS_EMOJI_ID }) // Yellow Flower
     );
 
     await message.channel.send({ embeds: [embed], components: [row] });
@@ -302,7 +304,7 @@ client.on("messageCreate", async (message) => {
         .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
     }
     
-    // Removed: !welcomeadalea, !stopwelcomeadalea, !restart
+    // All other commands are permanently removed as requested.
     
   } catch (e) {
     console.error(`[ERROR] Error processing messageCreate event for command ${message.content}:`, e);
@@ -329,13 +331,13 @@ client.on("interactionCreate", async (interaction) => {
           break;
           
         case "roles_pings":
-          roleList = rolesConfig.PINGS_ROLES; 
+          roleList = rolesConfig.PINGS_ROLES; // Corrected key match
           menuPlaceholder = "Select your ping roles";
           menuCustomId = "select_pings";
           break;
           
         case "roles_sessions":
-          roleList = rolesConfig.SHIFTS_ROLES; 
+          roleList = rolesConfig.SHIFTS_ROLES; // Corrected key match
           menuPlaceholder = "Select your session roles";
           menuCustomId = "select_sessions";
           break;
@@ -359,6 +361,7 @@ client.on("interactionCreate", async (interaction) => {
           .setValue(role.roleId)
           .setDefault(memberRoles.has(role.roleId)); 
         
+        // Final Fix: Only call setEmoji if role.emoji is defined (prevents crash)
         if (role.emoji) {
             option.setEmoji(role.emoji);
         }
@@ -451,9 +454,10 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// ─── MEMBER JOIN ───────────────────────────────────────────
+// ─── MEMBER JOIN (Automated Welcome) ───────────────────────
 client.on("guildMemberAdd", async (member) => {
   try {
+    // The welcome logic runs automatically because isWelcomerActive is true by default
     if (isWelcomerActive) sendWelcomeMessage(member);
   } catch (e) {
     console.error(`[ERROR] Error in guildMemberAdd event for ${member.user.tag}:`, e);
