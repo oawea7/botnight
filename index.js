@@ -261,12 +261,12 @@ async function sendWelcomeMessage(member, channel = null) {
         await targetChannel.send(`Welcome, ${member}!`);
 
         const embed = new EmbedBuilder()
-            .setTitle(`\${orangeFlower} **Welcome to Adalea!**`)
+            .setTitle(`<:flowers:1424840226785988608> **Welcome to Adalea!**`)
             .setDescription(
                 `Welcome, ${member}! We're so happy to have you here!\\
-\\
+\
 Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\\
-\\
+\
 Please make sure to review the <\#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <\#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
             )
             .setImage(welcomeEmbedImage)
