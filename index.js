@@ -27,8 +27,9 @@ const BOOSTER_LOUNGE_CHANNEL_ID = "1414381377389858908";
 const SERVER_BOOSTER_ROLE_ID = "1404242033849270272";
 const INFORMATION_CHANNEL_ID = "1402405335964057732";
 const SUPPORT_CHANNEL_ID = "1402405357812187287";
-// Using the correct MODERATION_ROLE_ID from your linked document
+// Role IDs
 const MODERATION_ROLE_ID = "1402411949593202800"; 
+const HR_ROLE_ID = "1402400473344114748"; 
 
 // Emojis
 const EMOJI_ADDED = "\<a:Zcheck:1437064263570292906\>";
@@ -37,6 +38,9 @@ const orangeFlower = "\<:orangeflower:1436795365172052018\>";
 const animatedFlower = "\<a:animatedflowers:1436795411309395991\>";
 const robloxEmoji = "\<:roblox:1337653461436596264\>";
 const handbookEmoji = "\<:handbook:1406695333135650846\>";
+
+// New image URL for !roles and !mrroles embed
+const ROLES_PANEL_NEW_IMAGE_URL = "https://cdn.discordapp.com/attachments/1315086065320722492/1449456787647627314/role_selection.png?ex=693ef753&is=693da5d3&hm=c6b4d254b4292e50d2b939b94e1d7a314b78ff54ea0d5c72b454b8524ce81b0f&";
 
 // Welcome Embed Image URL (Restored to its original value)
 const welcomeEmbedImage = "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png";
@@ -87,7 +91,10 @@ const client = new Client({
 async function loadRolesConfig() {
     try {
         rolesConfig = await fs.readJson(ROLES_FILE);
-        // Fix: Ensure all three role arrays exist in the config to prevent crashes
+        // Ensure the new image URL is used for the role panels
+        rolesConfig.ROLES_PANEL_IMAGE = ROLES_PANEL_NEW_IMAGE_URL; 
+        
+        // Fix: Ensure all role arrays exist in the config to prevent crashes
         if (!Array.isArray(rolesConfig.PRONOUN_ROLES)) rolesConfig.PRONOUN_ROLES = [];
         if (!Array.isArray(rolesConfig.PINGS_ROLES)) rolesConfig.PINGS_ROLES = [];
         if (!Array.isArray(rolesConfig.SHIFTS_ROLES)) rolesConfig.SHIFTS_ROLES = [];
@@ -113,7 +120,7 @@ async function loadRolesConfig() {
     }
 }
 
-// ─── BOOST FUNCTIONS (NO CHANGES) ───────────────────────────────────────
+// ─── BOOST FUNCTIONS ───────────────────────────────────────
 
 async function sendBoostThankYou(member, channel = null) {
     try {
@@ -167,6 +174,7 @@ async function createRolesPanel(message) {
             .setDescription(
                 `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
             )
+            // Uses the new image URL via rolesConfig
             .setImage(rolesConfig.ROLES_PANEL_IMAGE)
             .setColor(rolesConfig.EMBED_COLOR || "\#FFCC33");
 
@@ -209,35 +217,37 @@ async function createMRRolesPanel(message) {
 
         // --- EMBED IS NOW A COPY OF !ROLES ---
         const embed = new EmbedBuilder()
-            .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`) // COPY TITLE
-            .setDescription( // COPY DESCRIPTION (Only the text describing the process is changed)
-                `Welcome to Adalea's **Management Role Selection** channel! This is the channel where you can obtain your **management roles** and **timezone**. Simply click one of the buttons below (Staff Birthdays, Alliance Visits, or Timezone), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
+            .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
+            .setDescription(
+                // NEW, SIMPLIFIED DESCRIPTION
+                `To obtain Management roles, simply click on one of the buttons below (Staff Birthdays, Alliance Visits, or Timezone), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a <@&${HR_ROLE_ID}> member.`
             )
+            // Uses the new image URL via rolesConfig
             .setImage(rolesConfig.ROLES_PANEL_IMAGE)
             .setColor(rolesConfig.EMBED_COLOR || "\#FFCC33");
         // ------------------------------------
 
         const row = new ActionRowBuilder().addComponents(
-            // Button 1: Staff Birthdays (Uses Pronoun Button's old Style/Emoji)
+            // Button 1: Staff Birthdays
             new ButtonBuilder()
                 .setCustomId("roles_staff_birthdays")
                 .setLabel("Staff Birthdays")
-                .setStyle(ButtonStyle.Secondary) // Same as original Pronouns
-                .setEmoji({ id: PRONOUNS_EMOJI_ID }), // Same as original Pronouns
+                .setStyle(ButtonStyle.Secondary) 
+                .setEmoji({ id: PRONOUNS_EMOJI_ID }), 
 
-            // Button 2: Alliance Visits (Uses Pings Button's old Style/Emoji)
+            // Button 2: Alliance Visits
             new ButtonBuilder()
                 .setCustomId("roles_alliance_visits")
                 .setLabel("Alliance Visits")
-                .setStyle(ButtonStyle.Primary) // Same as original Pings
-                .setEmoji({ id: PINGS_EMOJI_ID }), // Same as original Pings
+                .setStyle(ButtonStyle.Primary) 
+                .setEmoji({ id: PINGS_EMOJI_ID }), 
 
-            // Button 3: Timezone (Uses Sessions Button's old Style/Emoji)
+            // Button 3: Timezone
             new ButtonBuilder()
                 .setCustomId("roles_timezone")
                 .setLabel("Timezone")
-                .setStyle(ButtonStyle.Success) // Same as original Sessions
-                .setEmoji({ id: SESSIONS_EMOJI_ID }) // Same as original Sessions
+                .setStyle(ButtonStyle.Success) 
+                .setEmoji({ id: SESSIONS_EMOJI_ID }) 
         );
 
         await message.channel.send({ embeds: [embed], components: [row] });
@@ -249,7 +259,7 @@ async function createMRRolesPanel(message) {
     }
 }
 
-// ─── WELCOME MESSAGE (NO CHANGES) ───────────────────────────────────────
+// ─── WELCOME MESSAGE ───────────────────────────────────────
 
 async function sendWelcomeMessage(member, channel = null) {
     try {
@@ -261,13 +271,10 @@ async function sendWelcomeMessage(member, channel = null) {
         await targetChannel.send(`Welcome, ${member}!`);
 
         const embed = new EmbedBuilder()
-            .setTitle(`<:flowers:1424840226785988608> **Welcome to Adalea!**`)
+            .setTitle(`\${orangeFlower} **Welcome to Adalea!**`)
             .setDescription(
-                `Welcome, ${member}! We're so happy to have you here!
-
-Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\\
-
-Please make sure to review the <\#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <\#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
+                // FIXED INDENTATION/BACKSLASHES
+                `Welcome, ${member}! We're so happy to have you here! \n\nAdalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\nPlease make sure to review the <\#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <\#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
             )
             .setImage(welcomeEmbedImage)
             .setFooter({
@@ -295,7 +302,7 @@ Please make sure to review the <\#${INFORMATION_CHANNEL_ID}> so you're aware of 
     }
 }
 
-// ─── MEMBER UPDATE (BOOST HANDLER - NO CHANGES) ─────────────────────────
+// ─── MEMBER UPDATE (BOOST HANDLER) ─────────────────────────
 
 client.on("guildMemberUpdate", async (oldMember, newMember) => {
     try {
@@ -662,7 +669,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 });
 
-// ─── MEMBER JOIN (Automated Welcome - NO CHANGES) ───────────────────────
+// ─── MEMBER JOIN (Automated Welcome) ───────────────────────
 
 client.on("guildMemberAdd", async (member) => {
     try {
