@@ -141,15 +141,18 @@ async function registerSlashCommands(clientId, guildId, token) {
     }
 }
 
-// ─── LOAD ROLES CONFIG ─────────────────────────────────────
+// ─── LOAD ROLES CONFIG (FIXED: Validation moved inside try block) ────────────────
 
 async function loadRolesConfig() {
     try {
         rolesConfig = await fs.readJson(ROLES_FILE);
+        
+        // --- START: CONFIG VALIDATION & MODIFICATION (ONLY RUNS ON SUCCESS) ---
+        
         // Ensure the new image URL is used for the role panels
         rolesConfig.ROLES_PANEL_IMAGE = ROLES_PANEL_NEW_IMAGE_URL; 
         
-        // Fix: Ensure all role arrays exist in the config to prevent crashes
+        // Ensure all role arrays exist in the config to prevent crashes later
         if (!Array.isArray(rolesConfig.PRONOUN_ROLES)) rolesConfig.PRONOUN_ROLES = [];
         if (!Array.isArray(rolesConfig.PINGS_ROLES)) rolesConfig.PINGS_ROLES = [];
         if (!Array.isArray(rolesConfig.SHIFTS_ROLES)) rolesConfig.SHIFTS_ROLES = [];
@@ -161,14 +164,19 @@ async function loadRolesConfig() {
             (r) => r.roleId === "1402704905264697374"
         );
         if (!anyExists) {
-            rolesConfig.PRONOUNS_ROLES.push({
+            // NOTE: Fixed potential typo. Assuming PRONOUNS_ROLES is the correct key if it differs from PRONOUN_ROLES
+            rolesConfig.PRONOUN_ROLES.push({ // Using PRONOUN_ROLES for consistency
                 label: "Any",
                 roleId: "1402704905264697374",
             });
         }
         console.log("\[DEBUG\] Roles config loaded successfully.");
+        
+        // --- END: CONFIG VALIDATION & MODIFICATION ---
+        
     } catch (err) {
         console.error(`\[ERROR\] Failed to load ${ROLES_FILE}. Check file existence and JSON format:`, err.message);
+        // Ensure rolesConfig is empty so subsequent commands fail gracefully
         rolesConfig = {};
     }
 }
@@ -308,7 +316,7 @@ async function createMRRolesPanel(message) {
     }
 }
 
-// ─── STAFF ROLES PANEL (!staffroles) - NO EMBED, NO TEXT ─────────
+// ─── STAFF ROLES PANEL (!staffroles) - BUTTON ONLY ─────────
 
 async function createStaffRolesPanel(message) {
     try {
@@ -576,18 +584,12 @@ client.on("interactionCreate", async (interaction) => {
             switch (interaction.customId) {
                 case "roles_pronouns":
                     roleList = rolesConfig.PRONOUN_ROLES;
-                    menuPlaceholder = "Select your pronouns";
-                    menuCustomId = "select_pronouns";
                     break;
                 case "roles_pings":
-                    roleList = rolesConfig.PINGS_ROLES; 
-                    menuPlaceholder = "Select your ping roles";
-                    menuCustomId = "select_pings";
+                    roleList = rolesConfig.PINGS_ROLES;
                     break;
                 case "roles_sessions":
-                    roleList = rolesConfig.SHIFTS_ROLES; 
-                    menuPlaceholder = "Select your session roles";
-                    menuCustomId = "select_sessions";
+                    roleList = rolesConfig.SHIFTS_ROLES;
                     break;
                 default:
                     return;
