@@ -7,6 +7,9 @@ const {
     ButtonStyle,
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
+    REST, // Required for slash commands
+    Routes, // Required for slash commands
+    ActivityType, // Required for bot status
 } = require("discord.js");
 const fs = require("fs-extra");
 const http = require("http");
@@ -19,10 +22,10 @@ const LEADERSHIP_ROLE_ID = "1402400285674049576";
 const SPECIAL_USER_ID = "1107787991444881408";
 const ROLES_FILE = "roles.json";
 let rolesConfig = {};
-let isWelcomerActive = true; // Welcomer is set to ACTIVE by default
+let isWelcomerActive = true; 
 
 // Channels & Roles IDs
-const COMMUNITY_CHANNEL_ID = "1402405984978341888"; // Also WELCOME_CHANNEL_ID
+const COMMUNITY_CHANNEL_ID = "1402405984978341888"; 
 const BOOSTER_LOUNGE_CHANNEL_ID = "1414381377389858908";
 const SERVER_BOOSTER_ROLE_ID = "1404242033849270272";
 const INFORMATION_CHANNEL_ID = "1402405335964057732";
@@ -31,31 +34,35 @@ const SUPPORT_CHANNEL_ID = "1402405357812187287";
 const MODERATION_ROLE_ID = "1402411949593202800"; 
 const HR_ROLE_ID = "1402400473344114748"; 
 
-// Emojis
-const EMOJI_ADDED = "\<a:Zcheck:1437064263570292906\>";
-const EMOJI_REMOVED = "\<a:Zx_:1437064220876472370\>";
+// Emojis (UPDATED AS REQUESTED)
+const EMOJI_ADDED = "\<a:Zcheck:1449445400883888322\>"; // New animated check
+const EMOJI_REMOVED = "\<a:checkno:1449445488200777759\>"; // New animated X
 const orangeFlower = "\<:orangeflower:1436795365172052018\>";
 const animatedFlower = "\<a:animatedflowers:1436795411309395991\>";
 const robloxEmoji = "\<:roblox:1337653461436596264\>";
 const handbookEmoji = "\<:handbook:1406695333135650846\>";
 
+// Welcome Title Emojis (FIXED)
+const WELCOME_TITLE_EMOJI = "\<:flowers:1424840226785988608\>"; // Corrected emoji for welcome title
+
 // New image URL for !roles and !mrroles embed
 const ROLES_PANEL_NEW_IMAGE_URL = "https://cdn.discordapp.com/attachments/1315086065320722492/1449456787647627314/role_selection.png?ex=693ef753&is=693da5d3&hm=c6b4d254b4292e50d2b939b94e1d7a314b78ff54ea0d5c72b454b8524ce81b0f&";
 
-// Welcome Embed Image URL (Restored to its original value)
+// Welcome Embed Image URL 
 const welcomeEmbedImage = "https://cdn.discordapp.com/attachments/1402400197874684027/1406391472714022912/banner.png";
 
 // Button Emoji IDs from your JSON
-const PRONOUNS_EMOJI_ID = '1438666085737041981'; // Red Flower
-const PINGS_EMOJI_ID = '1438666045203284102'; // White Flower
-const SESSIONS_EMOJI_ID = '1438665987145728051'; // Yellow Flower
+const PRONOUNS_EMOJI_ID = '1438666085737041981'; 
+const PINGS_EMOJI_ID = '1438666045203284102'; 
+const SESSIONS_EMOJI_ID = '1438665987145728051'; 
 
-// ─── NEW MR ROLES CONSTANTS ─────────────────────────────
+// ─── NEW MR & STAFF ROLES CONSTANTS ─────────────────────────────
 
 const STAFF_BIRTHDAYS_ROLE_ID = "1402729685527429182";
 const ALLIANCE_VISITS_ROLE_ID = "1442988716313411594";
+const RECRUITMENT_SHIFT_ROLE_ID = "1402729850246009058"; // New role for !staffroles
 
-// Map of Timezone Role IDs to their GMT labels
+// Map of Timezone Role IDs to their GMT labels 
 const TIMEZONE_ROLES = {
     '1418228585004531794': 'GMT 0',
     '1429399823857221702': 'GMT +1',
@@ -72,7 +79,7 @@ const TIMEZONE_ROLES = {
     '1418662112389234708': 'GMT -8',
 };
 
-// Array of all Timezone Role IDs for easy removal
+// Array of all Timezone Role IDs for easy removal 
 const TIMEZONE_ROLE_IDS = Object.keys(TIMEZONE_ROLES);
 
 // ─── CLIENT ────────────────────────────────────────────────
@@ -85,6 +92,54 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
+
+// ─── SLASH COMMAND REGISTRATION ────────────────────────────
+
+const commands = [
+    {
+        name: 'setstatus',
+        description: 'Sets the bot\'s presence status (Activity and Text).',
+        options: [{
+            name: 'status_text',
+            type: 3, // STRING
+            description: 'The text for the bot\'s status (e.g., "Playing in Adalea").',
+            required: true,
+        },
+        {
+            name: 'activity_type',
+            type: 3, // STRING
+            description: 'The activity type (Playing, Watching, Listening, Competing).',
+            required: false,
+            choices: [
+                { name: 'Playing', value: 'Playing' },
+                { name: 'Watching', value: 'Watching' },
+                { name: 'Listening', value: 'Listening' },
+                { name: 'Competing', value: 'Competing' },
+            ],
+        }],
+    },
+];
+
+async function registerSlashCommands(clientId, guildId, token) {
+    if (!token) return console.error("[ERROR] BOT_TOKEN is missing. Cannot register slash commands.");
+    if (!clientId) return console.error("[ERROR] CLIENT_ID is missing. Cannot register slash commands.");
+
+    const rest = new REST({ version: '10' }).setToken(token);
+
+    try {
+        console.log('Started refreshing application (/) commands.');
+
+        const endpoint = guildId
+            ? Routes.applicationGuildCommands(clientId, guildId)
+            : Routes.applicationCommands(clientId);
+
+        await rest.put(endpoint, { body: commands });
+
+        console.log('Successfully reloaded application (/) commands.');
+    } catch (error) {
+        console.error("\[ERROR\] Failed to register slash commands:", error);
+    }
+}
 
 // ─── LOAD ROLES CONFIG ─────────────────────────────────────
 
@@ -106,15 +161,13 @@ async function loadRolesConfig() {
             (r) => r.roleId === "1402704905264697374"
         );
         if (!anyExists) {
-            rolesConfig.PRONOUN_ROLES.push({
+            rolesConfig.PRONOUNS_ROLES.push({
                 label: "Any",
                 roleId: "1402704905264697374",
             });
-            console.log("\[DEBUG\] Added pronoun role 'Any' to rolesConfig.");
         }
         console.log("\[DEBUG\] Roles config loaded successfully.");
     } catch (err) {
-        // This catches the 'Error: No roles config loaded.'
         console.error(`\[ERROR\] Failed to load ${ROLES_FILE}. Check file existence and JSON format:`, err.message);
         rolesConfig = {};
     }
@@ -174,7 +227,6 @@ async function createRolesPanel(message) {
             .setDescription(
                 `Welcome to Adalea's Role Selection channel! This is the channel where you can obtain your pronouns, ping roles, and shift/session notifications. Simply click one of the buttons below (Pronouns, Pings, or Sessions), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a member of the <@&${MODERATION_ROLE_ID}>.`
             )
-            // Uses the new image URL via rolesConfig
             .setImage(rolesConfig.ROLES_PANEL_IMAGE)
             .setColor(rolesConfig.EMBED_COLOR || "\#FFCC33");
 
@@ -183,17 +235,17 @@ async function createRolesPanel(message) {
                 .setCustomId("roles_pronouns")
                 .setLabel("Pronouns")
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji({ id: PRONOUNS_EMOJI_ID }), // Red Flower
+                .setEmoji({ id: PRONOUNS_EMOJI_ID }), 
             new ButtonBuilder()
                 .setCustomId("roles_pings")
                 .setLabel("Pings")
                 .setStyle(ButtonStyle.Primary)
-                .setEmoji({ id: PINGS_EMOJI_ID }), // White Flower
+                .setEmoji({ id: PINGS_EMOJI_ID }), 
             new ButtonBuilder()
                 .setCustomId("roles_sessions")
                 .setLabel("Sessions")
                 .setStyle(ButtonStyle.Success)
-                .setEmoji({ id: SESSIONS_EMOJI_ID }) // Yellow Flower
+                .setEmoji({ id: SESSIONS_EMOJI_ID }) 
         );
 
         await message.channel.send({ embeds: [embed], components: [row] });
@@ -205,7 +257,7 @@ async function createRolesPanel(message) {
     }
 }
 
-// ─── MR ROLES PANEL (NEW !mrroles command - VISUALLY IDENTICAL) ─────────
+// ─── MR ROLES PANEL (!mrroles) ─────────────────────────
 
 async function createMRRolesPanel(message) {
     try {
@@ -215,17 +267,14 @@ async function createMRRolesPanel(message) {
                 .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
         }
 
-        // --- EMBED IS NOW A COPY OF !ROLES ---
         const embed = new EmbedBuilder()
             .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
             .setDescription(
-                // NEW, SIMPLIFIED DESCRIPTION
+                // FINAL, SIMPLIFIED DESCRIPTION
                 `To obtain Management roles, simply click on one of the buttons below (Staff Birthdays, Alliance Visits, or Timezone), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a <@&${HR_ROLE_ID}> member.`
             )
-            // Uses the new image URL via rolesConfig
             .setImage(rolesConfig.ROLES_PANEL_IMAGE)
             .setColor(rolesConfig.EMBED_COLOR || "\#FFCC33");
-        // ------------------------------------
 
         const row = new ActionRowBuilder().addComponents(
             // Button 1: Staff Birthdays
@@ -259,7 +308,29 @@ async function createMRRolesPanel(message) {
     }
 }
 
-// ─── WELCOME MESSAGE ───────────────────────────────────────
+// ─── STAFF ROLES PANEL (!staffroles) - NO EMBED, NO TEXT ─────────
+
+async function createStaffRolesPanel(message) {
+    try {
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId("roles_recruitment_shift") // Custom ID for interaction
+                .setLabel("Recruitment Shift")
+                .setStyle(ButtonStyle.Primary) 
+                .setEmoji({ name: 'recruitment_emoji', id: PRONOUNS_EMOJI_ID })
+        );
+
+        // Send only the action row (the button)
+        await message.channel.send({ components: [row] });
+        console.log("\[DEBUG\] Staff Roles panel sent successfully (button only).");
+
+    } catch (err) {
+        console.error("\[ERROR\] Failed to send staff roles panel message or components:", err);
+        await message.channel.send("A critical error occurred while creating the staff roles panel. Check bot logs.").catch(() => {});
+    }
+}
+
+// ─── WELCOME MESSAGE (FIXED TITLE & INDENTS) ───────────────
 
 async function sendWelcomeMessage(member, channel = null) {
     try {
@@ -271,7 +342,8 @@ async function sendWelcomeMessage(member, channel = null) {
         await targetChannel.send(`Welcome, ${member}!`);
 
         const embed = new EmbedBuilder()
-            .setTitle(`\<:flowers:1424840226785988608> **Welcome to Adalea!**`)
+            // FIXED TITLE: Using the correct constant (WELCOME_TITLE_EMOJI)
+            .setTitle(`${WELCOME_TITLE_EMOJI} **Welcome to Adalea!**`) 
             .setDescription(
                 // FIXED INDENTATION/BACKSLASHES
                 `Welcome, ${member}! We're so happy to have you here! \n\nAdalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\n\nPlease make sure to review the <\#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <\#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
@@ -357,10 +429,11 @@ client.on("messageCreate", async (message) => {
         const isSpecial = message.author.id === SPECIAL_USER_ID;
         const isPermitted = hasRole || isSpecial;
 
-        // Only include the four needed commands
+        // Added 'staffroles' to restricted commands
         const restrictedCommands = [
             "roles",
             "mrroles", 
+            "staffroles",
             "testwelcome",
             "testboost"
         ];
@@ -389,18 +462,24 @@ client.on("messageCreate", async (message) => {
             return;
         }
 
+        // NEW COMMAND HANDLER
+        if (command === "staffroles") { 
+            await createStaffRolesPanel(message);
+            return;
+        }
+
         if (command === "testboost") {
             await sendBoostThankYou(message.member, message.channel);
             await sendBoosterLoungeWelcome(message.member, message.channel);
             return message.channel
-                .send(`\${EMOJI_ADDED} **Boost messages sent here for testing.**`)
+                .send(`${EMOJI_ADDED} **Boost messages sent here for testing.**`)
                 .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
         }
 
         if (command === "testwelcome") {
             await sendWelcomeMessage(message.member, message.channel);
             return message.channel
-                .send(`\${EMOJI_ADDED} **Welcome message sent here for testing.**`)
+                .send(`${EMOJI_ADDED} **Welcome message sent here for testing.**`)
                 .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
         }
 
@@ -415,13 +494,12 @@ client.on("interactionCreate", async (interaction) => {
 
     // Defer the reply for buttons and select menus to prevent "Interaction Failed" errors
     if ((interaction.isButton() || interaction.isStringSelectMenu()) && !interaction.deferred && !interaction.replied) {
-        // Defer ephemeral ensures the invisible message is used for all responses
         await interaction.deferReply({ ephemeral: true }).catch(console.error);
     }
 
     try {
         if (interaction.isButton()) {
-            // --- NEW DIRECT ROLE TOGGLE LOGIC (Staff Birthdays & Alliance Visits) ---
+            // --- NEW DIRECT ROLE TOGGLE LOGIC (Staff Birthdays, Alliance Visits, & Recruitment Shift) ---
             let directRoleId = null;
             
             switch (interaction.customId) {
@@ -430,6 +508,9 @@ client.on("interactionCreate", async (interaction) => {
                     break;
                 case "roles_alliance_visits":
                     directRoleId = ALLIANCE_VISITS_ROLE_ID;
+                    break;
+                case "roles_recruitment_shift": // NEW STAFF ROLES BUTTON
+                    directRoleId = RECRUITMENT_SHIFT_ROLE_ID;
                     break;
             }
 
@@ -444,11 +525,9 @@ client.on("interactionCreate", async (interaction) => {
                         response = `${EMOJI_REMOVED} Role removed.`;
                     } else {
                         await member.roles.add(directRoleId);
-                        // User requested "invisible message saying role added"
-                        response = "role added";
+                        response = "role added"; // Invisible message as requested
                     }
 
-                    // Must use editReply because it was deferred earlier
                     return interaction.editReply({
                         content: response,
                         ephemeral: true
@@ -463,11 +542,10 @@ client.on("interactionCreate", async (interaction) => {
                 }
             }
 
-            // --- NEW TIMEZONE DROPDOWN TRIGGER LOGIC ---
+            // --- TIMEZONE DROPDOWN TRIGGER LOGIC ─────────────────────
             if (interaction.customId === "roles_timezone") {
                 const memberRoles = interaction.member.roles.cache;
 
-                // Build options for the Timezone dropdown
                 const options = TIMEZONE_ROLE_IDS.map(roleId => {
                     const label = TIMEZONE_ROLES[roleId];
                     return new StringSelectMenuOptionBuilder()
@@ -477,10 +555,10 @@ client.on("interactionCreate", async (interaction) => {
                 });
 
                 const selectMenu = new StringSelectMenuBuilder()
-                    .setCustomId("select_timezone") // New custom ID for submission
+                    .setCustomId("select_timezone") 
                     .setPlaceholder("Select your GMT Timezone")
                     .setMinValues(0)
-                    .setMaxValues(1) // Only one timezone role should be selectable
+                    .setMaxValues(1) 
                     .addOptions(options);
 
                 const row = new ActionRowBuilder().addComponents(selectMenu);
@@ -492,7 +570,7 @@ client.on("interactionCreate", async (interaction) => {
                 });
             }
 
-            // --- ORIGINAL ROLES LOGIC (PRONOUNS, PINGS, SESSIONS) ---
+            // --- ORIGINAL ROLES LOGIC (PRONOUNS, PINGS, SESSIONS) ─────
             let roleList, menuPlaceholder, menuCustomId;
 
             switch (interaction.customId) {
@@ -552,15 +630,15 @@ client.on("interactionCreate", async (interaction) => {
 
         } else if (interaction.isStringSelectMenu()) {
             
-            // --- NEW TIMEZONE SELECT MENU SUBMISSION ---
+            // --- TIMEZONE SELECT MENU SUBMISSION ─────────────────────
             if (interaction.customId === "select_timezone") {
                 const member = interaction.member;
-                const selectedRoleIds = interaction.values; // Will contain 0 or 1 ID
+                const selectedRoleIds = interaction.values; 
                 const memberRoles = member.roles;
                 let addedRole = null;
                 let removedRolesCount = 0;
 
-                // 1. Remove ALL existing timezone roles to ensure only one is active
+                // 1. Remove ALL existing timezone roles 
                 for (const roleId of TIMEZONE_ROLE_IDS) {
                     if (memberRoles.cache.has(roleId)) {
                         await memberRoles.remove(roleId).catch(e => {
@@ -596,7 +674,7 @@ client.on("interactionCreate", async (interaction) => {
                 });
             }
 
-            // --- ORIGINAL SELECT MENU SUBMISSION (Pronouns, Pings, Sessions) ---
+            // --- ORIGINAL SELECT MENU SUBMISSION (Pronouns, Pings, Sessions) ─────
             let roleList;
 
             switch (interaction.customId) {
@@ -663,8 +741,59 @@ client.on("interactionCreate", async (interaction) => {
         if (interaction.deferred) {
             interaction.editReply({ content: "A critical and unexpected error occurred while processing your request. Please check the bot logs for details." }).catch(() => {});
         } else if (!interaction.replied) {
-            // Fallback reply if the initial defer failed somehow
             interaction.reply({ content: "A critical and unexpected error occurred.", ephemeral: true }).catch(() => {});
+        }
+    }
+});
+
+// ─── SLASH COMMAND HANDLER ───────────────────────────────
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === 'setstatus') {
+        const hasRole = interaction.member.roles.cache.has(LEADERSHIP_ROLE_ID);
+        const isSpecial = interaction.user.id === SPECIAL_USER_ID;
+        const isPermitted = hasRole || isSpecial;
+
+        if (!isPermitted) {
+            return interaction.reply({ content: "u dont have access to run this command.", ephemeral: true });
+        }
+
+        const statusText = interaction.options.getString('status_text');
+        const activityTypeInput = interaction.options.getString('activity_type') || 'Playing';
+        let activityType;
+
+        switch (activityTypeInput) {
+            case 'Watching':
+                activityType = ActivityType.Watching;
+                break;
+            case 'Listening':
+                activityType = ActivityType.Listening;
+                break;
+            case 'Competing':
+                activityType = ActivityType.Competing;
+                break;
+            case 'Playing':
+            default:
+                activityType = ActivityType.Playing;
+                break;
+        }
+
+        try {
+            client.user.setPresence({
+                activities: [{ name: statusText, type: activityType }],
+                status: 'online', 
+            });
+
+            await interaction.reply({
+                content: `${EMOJI_ADDED} Bot status updated to **${activityTypeInput}** ${statusText}`,
+                ephemeral: true,
+            });
+
+        } catch (error) {
+            console.error("\[ERROR\] Failed to set bot status:", error);
+            await interaction.reply({ content: `${EMOJI_REMOVED} Failed to update bot status. Check logs.`, ephemeral: true });
         }
     }
 });
@@ -673,7 +802,6 @@ client.on("interactionCreate", async (interaction) => {
 
 client.on("guildMemberAdd", async (member) => {
     try {
-        // The welcome logic runs automatically because isWelcomerActive is true by default
         if (isWelcomerActive) sendWelcomeMessage(member);
     } catch (e) {
         console.error(`\[ERROR\] Error in guildMemberAdd event for ${member.user.tag}:`, e);
@@ -685,6 +813,9 @@ client.on("guildMemberAdd", async (member) => {
 client.once("ready", async () => {
     console.log(`Bot online as ${client.user.tag}`);
     await loadRolesConfig();
+
+    // Register slash commands upon startup
+    await registerSlashCommands(client.user.id, null, process.env.BOT_TOKEN); 
 });
 
 // ─── KEEP-ALIVE & LOGIN ────────────────────────────────────
