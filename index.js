@@ -37,7 +37,7 @@ const SUPPORT_CHANNEL_ID = "1402405357812187287";
 const MODERATION_ROLE_ID = "1402411949593202800";
 const HR_ROLE_ID = "1402400473344114748";
 
-// Emojis (UPDATED AS REQUESTED)
+// Emojis
 const EMOJI_ADDED = "<a:Zcheck:1449445400883888322>"; // New animated check
 const EMOJI_REMOVED = "<a:checkno:1449445488200777759>"; // New animated X
 const orangeFlower = "<:orangeflower:1436795365172052018>";
@@ -45,8 +45,8 @@ const animatedFlower = "<a:animatedflowers:1436795411309395991>";
 const robloxEmoji = "<:roblox:1337653461436596264>";
 const handbookEmoji = "<:handbook:1406695333135650846>";
 
-// Welcome Title Emojis (FIXED)
-const WELCOME_TITLE_EMOJI = "<:flowers:1424840226785988608>"; // Corrected emoji for welcome title
+// Welcome Title Emojis
+const WELCOME_TITLE_EMOJI = "<:flowers:1424840226785988608>"; 
 
 // New image URL for !roles and !mrroles embed
 const ROLES_PANEL_NEW_IMAGE_URL = "https://cdn.discordapp.com/attachments/1315086065320722492/1449456787647627314/role_selection.png?ex=693ef753&is=693da5d3&hm=c6b4d254b4292e50d2b939b94e1d7a314b78ff54ea0d5c72b454b8524ce81b0f&";
@@ -59,12 +59,12 @@ const PRONOUNS_EMOJI_ID = '1438666085737041981';
 const PINGS_EMOJI_ID = '1438666045203284102';
 const SESSIONS_EMOJI_ID = '1438665987145728051';
 
-// ─── NEW MR & STAFF ROLES CONSTANTS ─────────────────────────────
+// MR & STAFF ROLES CONSTANTS
 const STAFF_BIRTHDAYS_ROLE_ID = "1402729685527429182";
 const ALLIANCE_VISITS_ROLE_ID = "1442988716313411594";
-const RECRUITMENT_SHIFT_ROLE_ID = "1402729850246009058"; // New role for !staffroles
+const RECRUITMENT_SHIFT_ROLE_ID = "1402729850246009058"; 
 
-// Map of Timezone Role IDs to their GMT labels
+// Map of Timezone Role IDs to their GMT labels (UPDATED WITH GMT+11)
 const TIMEZONE_ROLES = {
     '1418228585004531794': 'GMT 0',
     '1429399823857221702': 'GMT +1',
@@ -73,6 +73,7 @@ const TIMEZONE_ROLES = {
     '1439013856310460506': 'GMT +4',
     '1447381524164116660': 'GMT +5:30',
     '1438557821896491008': 'GMT +8',
+    '1451117360684470303': 'GMT +11', // Added as requested
     '1447303642607779922': 'GMT -1',
     '1441209637889376488': 'GMT -3',
     '1438560845620838471': 'GMT -3:30',
@@ -84,6 +85,18 @@ const TIMEZONE_ROLES = {
 // Array of all Timezone Role IDs for easy removal
 const TIMEZONE_ROLE_IDS = Object.keys(TIMEZONE_ROLES);
 
+// ─── ROBLOX WEBHOOK CONSTANTS ─────────────────────────────
+const GROUP_ID = 250548768;
+const WEBHOOK_URL = "https://discord.com/api/webhooks/1435776532667961486/Eq7fPxupMrTsMmgR-4tlT-Zr1ZgyqrGLXyqCFddxjxqcIKuWK5gEf-SzQKma5OtKfHof";
+const CHECK_INTERVAL = 60000; 
+const GOAL_STEP = 100;
+const ALERT_USER = "987795928129880074";
+
+let currentMembers = null;
+let currentGoal = null;
+let onlineStatus = false;
+let wasOffline = false;
+
 // ─── CLIENT ────────────────────────────────────────────────
 
 const client = new Client({
@@ -94,6 +107,95 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
+
+// ─── MEMBER COUNTER FUNCTIONS ─────────────────────────────
+
+async function sendWebhookEmbed(description, ping = false) {
+    const payload = {
+        embeds: [{
+            title: "Member Counter",
+            description: description,
+            color: 0xFFA500, // Orange
+            footer: { text: new Date().toUTCString() }
+        }]
+    };
+
+    if (ping) {
+        payload.content = `<@${ALERT_USER}>`;
+    }
+
+    try {
+        await fetch(WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+    } catch (e) {
+        console.error("[ERROR] Failed to send webhook:", e);
+    }
+}
+
+async function checkGroup() {
+    try {
+        const response = await fetch(`https://groups.roblox.com/v1/groups/${GROUP_ID}`);
+        
+        if (!response.ok) {
+            if (onlineStatus) {
+                await sendWebhookEmbed("Webhook offline.", true);
+                onlineStatus = false;
+                wasOffline = true;
+            }
+            return;
+        }
+
+        const data = await response.json();
+        const members = data.memberCount;
+
+        if (wasOffline && !onlineStatus) {
+            await sendWebhookEmbed("Webhook restored — connection reestablished successfully.");
+            wasOffline = false;
+            onlineStatus = true;
+        }
+
+        if (currentMembers === null) {
+            currentMembers = members;
+            currentGoal = Math.ceil(members / GOAL_STEP) * GOAL_STEP;
+            if (currentGoal <= members) currentGoal += GOAL_STEP;
+            
+            if (!onlineStatus) {
+                await sendWebhookEmbed("Webhook online — awaiting member changes.");
+                onlineStatus = true;
+            }
+            return;
+        }
+
+        if (members === currentMembers) return;
+
+        const diff = members - currentMembers;
+        currentMembers = members;
+
+        if (members >= currentGoal) {
+            await sendWebhookEmbed(`🎉 Adalea is now at **${members.toLocaleString()}** members! Congrats everyone, we reached our goal of **${currentGoal.toLocaleString()}**!`);
+            currentGoal += GOAL_STEP;
+        } else {
+            const remaining = currentGoal - members;
+            let description = "";
+            if (diff > 0) {
+                description = `🌺 Adalea is now at **${members.toLocaleString()}** members! We are **${remaining.toLocaleString()}** away from our goal. #RoadTo${currentGoal}`;
+            } else {
+                description = `🌷 Uh-oh! Adalea is now at **${members.toLocaleString()}** members. Only **${remaining.toLocaleString()}** left to reach our goal. #RoadTo${currentGoal}`;
+            }
+            await sendWebhookEmbed(description);
+        }
+
+    } catch (err) {
+        if (onlineStatus) {
+            await sendWebhookEmbed("Webhook offline.", true);
+            onlineStatus = false;
+            wasOffline = true;
+        }
+    }
+}
 
 // ─── SLASH COMMAND REGISTRATION ────────────────────────────
 
@@ -142,42 +244,35 @@ async function registerSlashCommands(clientId, guildId, token) {
     }
 }
 
-// ─── LOAD ROLES CONFIG (FIXED: Validation moved inside try block) ────────────────
+// ─── LOAD ROLES CONFIG ────────────────────────────────────
 
 async function loadRolesConfig() {
     try {
         rolesConfig = await fs.readJson(ROLES_FILE);
 
-        // --- START: CONFIG VALIDATION & MODIFICATION (ONLY RUNS ON SUCCESS) ---
-        // Ensure the new image URL is used for the role panels
         rolesConfig.ROLES_PANEL_IMAGE = ROLES_PANEL_NEW_IMAGE_URL;
 
-        // Ensure all role arrays exist in the config to prevent crashes later
         if (!Array.isArray(rolesConfig.PRONOUN_ROLES)) rolesConfig.PRONOUN_ROLES = [];
         if (!Array.isArray(rolesConfig.PINGS_ROLES)) rolesConfig.PINGS_ROLES = [];
         if (!Array.isArray(rolesConfig.SHIFTS_ROLES)) rolesConfig.SHIFTS_ROLES = [];
         if (!Array.isArray(rolesConfig.MANAGEMENT_ROLES)) rolesConfig.MANAGEMENT_ROLES = [];
         if (!Array.isArray(rolesConfig.TIMEZONE_ROLES)) rolesConfig.TIMEZONE_ROLES = [];
 
-        // Auto-add "Any" pronoun role for stability
         const anyExists = rolesConfig.PRONOUN_ROLES.some(
             (r) => r.roleId === "1402704905264697374"
         );
 
         if (!anyExists) {
-            // NOTE: Fixed potential typo. Assuming PRONOUNS_ROLES is the correct key if it differs from PRONOUN_ROLES
-            rolesConfig.PRONOUN_ROLES.push({ // Using PRONOUN_ROLES for consistency
+            rolesConfig.PRONOUN_ROLES.push({ 
                 label: "Any",
                 roleId: "1402704905264697374",
             });
         }
 
         console.log("\\[DEBUG\\] Roles config loaded successfully.");
-        // --- END: CONFIG VALIDATION & MODIFICATION ---
 
     } catch (err) {
         console.error(`\\[ERROR\\] Failed to load ${ROLES_FILE}. Check file existence and JSON format:`, err.message);
-        // Ensure rolesConfig is empty so subsequent commands fail gracefully
         rolesConfig = {};
     }
 }
@@ -222,7 +317,7 @@ async function sendBoosterLoungeWelcome(member, channel = null) {
     }
 }
 
-// ─── ROLES PANEL (Original !roles) ─────────────────────────
+// ─── ROLES PANEL ─────────────────────────────────────────
 
 async function createRolesPanel(message) {
     try {
@@ -266,7 +361,7 @@ async function createRolesPanel(message) {
     }
 }
 
-// ─── MR ROLES PANEL (!mrroles) ─────────────────────────
+// ─── MR ROLES PANEL ─────────────────────────
 
 async function createMRRolesPanel(message) {
     try {
@@ -279,26 +374,22 @@ async function createMRRolesPanel(message) {
         const embed = new EmbedBuilder()
             .setTitle(`${rolesConfig.EMBED_TITLE_EMOJI} **Adalea Roles**`)
             .setDescription(
-                // FINAL, SIMPLIFIED DESCRIPTION
                 `To obtain Management roles, simply click on one of the buttons below (Staff Birthdays, Alliance Visits, or Timezone), open the dropdown, and choose the roles you want. If you wish to remove a role, simply click the button again to unselect! If you have any issues, contact a <@&${HR_ROLE_ID}> member.`
             )
             .setImage(rolesConfig.ROLES_PANEL_IMAGE)
             .setColor(rolesConfig.EMBED_COLOR || "#FFCC33");
 
         const row = new ActionRowBuilder().addComponents(
-            // Button 1: Staff Birthdays
             new ButtonBuilder()
                 .setCustomId("roles_staff_birthdays")
                 .setLabel("Staff Birthdays")
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji({ id: PRONOUNS_EMOJI_ID }),
-            // Button 2: Alliance Visits
             new ButtonBuilder()
                 .setCustomId("roles_alliance_visits")
                 .setLabel("Alliance Visits")
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji({ id: PINGS_EMOJI_ID }),
-            // Button 3: Timezone
             new ButtonBuilder()
                 .setCustomId("roles_timezone")
                 .setLabel("Timezone")
@@ -314,19 +405,18 @@ async function createMRRolesPanel(message) {
     }
 }
 
-// ─── STAFF ROLES PANEL (!staffroles) - BUTTON ONLY ─────────
+// ─── STAFF ROLES PANEL ─────────────────
 
 async function createStaffRolesPanel(message) {
     try {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId("roles_recruitment_shift") // Custom ID for interaction
+                .setCustomId("roles_recruitment_shift") 
                 .setLabel("Recruitment Shift")
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji({ name: 'recruitment_emoji', id: PRONOUNS_EMOJI_ID })
         );
 
-        // Send only the action row (the button)
         await message.channel.send({ components: [row] });
         console.log("\\[DEBUG\\] Staff Roles panel sent successfully (button only).");
     } catch (err) {
@@ -335,7 +425,7 @@ async function createStaffRolesPanel(message) {
     }
 }
 
-// ─── WELCOME MESSAGE (FIXED TITLE & INDENTS) ───────────────
+// ─── WELCOME MESSAGE ───────────────
 
 async function sendWelcomeMessage(member, channel = null) {
     try {
@@ -347,16 +437,13 @@ async function sendWelcomeMessage(member, channel = null) {
         await targetChannel.send(`Welcome, ${member}!`);
 
         const embed = new EmbedBuilder()
-            // FIXED TITLE: Using the correct constant (WELCOME_TITLE_EMOJI)
             .setTitle(`${WELCOME_TITLE_EMOJI} **Welcome to Adalea!**`)
             .setDescription(
-                // FIXED INDENTATION/BACKSLASHES
                 `Welcome, ${member}! We're so happy to have you here! \
 \
 Adalea is a tropical-inspired restaurant experience on the Roblox platform that strives to create memorable and unique interactions for our guests.\
 \
 Please make sure to review the <#${INFORMATION_CHANNEL_ID}> so you're aware of our server guidelines. If you have any questions or concerns, feel free to open a ticket in <#${SUPPORT_CHANNEL_ID}>. We hope you enjoy your stay! ${animatedFlower}`
-
             )
             .setImage(welcomeEmbedImage)
             .setFooter({
@@ -394,7 +481,6 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
         if (!boosterRole)
             return console.error("\\[ERROR\\] Server Booster Role not found!");
 
-        // BOOST DETECTED
         if (!oldBoost && newBoost) {
             console.log(`\\[DEBUG\\] ${newMember.user.tag} started boosting!`);
 
@@ -411,7 +497,6 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
             await sendBoosterLoungeWelcome(newMember);
         }
 
-        // UNBOOST DETECTED
         else if (oldBoost && !newBoost) {
             console.log(`\\[DEBUG\\] ${newMember.user.tag} stopped boosting.`);
 
@@ -442,7 +527,6 @@ client.on("messageCreate", async (message) => {
         const isSpecial = message.author.id === SPECIAL_USER_ID;
         const isPermitted = hasRole || isSpecial;
 
-        // Added 'staffroles' to restricted commands
         const restrictedCommands = [
             "roles",
             "mrroles",
@@ -451,19 +535,15 @@ client.on("messageCreate", async (message) => {
             "testboost"
         ];
 
-        // Check permissions only for the required commands
         if (restrictedCommands.includes(command) && !isPermitted) {
-            // Permission denied message
-            return message.reply("u dont have access")
+            return message.reply("You don't have access to run this command.")
                 .then((msg) => setTimeout(() => msg.delete().catch(() => {}), 5000));
         }
 
-        // Delete the command message
         if (restrictedCommands.includes(command) && message.channel.permissionsFor(client.user).has("ManageMessages")) {
             await message.delete().catch(() => {});
         }
 
-        // --- COMMAND HANDLERS ---
         if (command === "roles") {
             await createRolesPanel(message);
             return;
@@ -474,7 +554,6 @@ client.on("messageCreate", async (message) => {
             return;
         }
 
-        // NEW COMMAND HANDLER
         if (command === "staffroles") {
             await createStaffRolesPanel(message);
             return;
@@ -503,14 +582,12 @@ client.on("messageCreate", async (message) => {
 // ─── INTERACTION HANDLER ──────────────────────────────────
 
 client.on("interactionCreate", async (interaction) => {
-    // Defer the reply for buttons and select menus to prevent "Interaction Failed" errors
     if ((interaction.isButton() || interaction.isStringSelectMenu()) && !interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ ephemeral: true }).catch(console.error);
     }
 
     try {
         if (interaction.isButton()) {
-            // --- NEW DIRECT ROLE TOGGLE LOGIC (Staff Birthdays, Alliance Visits, & Recruitment Shift) ---
             let directRoleId = null;
             switch (interaction.customId) {
                 case "roles_staff_birthdays":
@@ -519,7 +596,7 @@ client.on("interactionCreate", async (interaction) => {
                 case "roles_alliance_visits":
                     directRoleId = ALLIANCE_VISITS_ROLE_ID;
                     break;
-                case "roles_recruitment_shift": // NEW STAFF ROLES BUTTON
+                case "roles_recruitment_shift": 
                     directRoleId = RECRUITMENT_SHIFT_ROLE_ID;
                     break;
             }
@@ -535,7 +612,7 @@ client.on("interactionCreate", async (interaction) => {
                         response = `${EMOJI_REMOVED} Role removed.`;
                     } else {
                         await member.roles.add(directRoleId);
-                        response = "role added"; // Invisible message as requested
+                        response = `${EMOJI_ADDED} Role Added`; // UPDATED RESPONSE
                     }
 
                     return interaction.editReply({
@@ -551,7 +628,6 @@ client.on("interactionCreate", async (interaction) => {
                 }
             }
 
-            // --- TIMEZONE DROPDOWN TRIGGER LOGIC ─────────────────────
             if (interaction.customId === "roles_timezone") {
                 const memberRoles = interaction.member.roles.cache;
                 const options = TIMEZONE_ROLE_IDS.map(roleId => {
@@ -578,24 +654,23 @@ client.on("interactionCreate", async (interaction) => {
                 });
             }
 
-            // --- ORIGINAL ROLES LOGIC (PRONOUNS, PINGS, SESSIONS) ─────
             let roleList, menuPlaceholder, menuCustomId;
 
             switch (interaction.customId) {
                 case "roles_pronouns":
                     roleList = rolesConfig.PRONOUN_ROLES;
-                    menuCustomId = "select_pronouns"; // <<<< FIX: Assign custom ID
-                    menuPlaceholder = "Select your Pronoun Roles"; // <<<< FIX: Assign placeholder
+                    menuCustomId = "select_pronouns";
+                    menuPlaceholder = "Select your Pronoun Roles";
                     break;
                 case "roles_pings":
                     roleList = rolesConfig.PINGS_ROLES;
-                    menuCustomId = "select_pings"; // <<<< FIX: Assign custom ID
-                    menuPlaceholder = "Select your Ping Roles"; // <<<< FIX: Assign placeholder
+                    menuCustomId = "select_pings";
+                    menuPlaceholder = "Select your Ping Roles";
                     break;
                 case "roles_sessions":
                     roleList = rolesConfig.SHIFTS_ROLES;
-                    menuCustomId = "select_sessions"; // <<<< FIX: Assign custom ID
-                    menuPlaceholder = "Select your Shift/Session Roles"; // <<<< FIX: Assign placeholder
+                    menuCustomId = "select_sessions";
+                    menuPlaceholder = "Select your Shift/Session Roles";
                     break;
                 default:
                     return;
@@ -636,7 +711,6 @@ client.on("interactionCreate", async (interaction) => {
             });
 
         } else if (interaction.isStringSelectMenu()) {
-            // --- TIMEZONE SELECT MENU SUBMISSION ─────────────────────
             if (interaction.customId === "select_timezone") {
                 const member = interaction.member;
                 const selectedRoleIds = interaction.values;
@@ -644,7 +718,6 @@ client.on("interactionCreate", async (interaction) => {
                 let addedRole = null;
                 let removedRolesCount = 0;
 
-                // 1. Remove ALL existing timezone roles
                 for (const roleId of TIMEZONE_ROLE_IDS) {
                     if (memberRoles.cache.has(roleId)) {
                         await memberRoles.remove(roleId).catch(e => {
@@ -654,7 +727,6 @@ client.on("interactionCreate", async (interaction) => {
                     }
                 }
 
-                // 2. Add the newly selected role (if any)
                 if (selectedRoleIds.length > 0) {
                     const newRoleId = selectedRoleIds[0];
                     await memberRoles.add(newRoleId).then(() => {
@@ -664,16 +736,11 @@ client.on("interactionCreate", async (interaction) => {
                     });
                 }
 
-                // 3. Build response
                 let response = "Your timezone role has been updated!";
                 if (addedRole) {
-                    response += `\
-${EMOJI_ADDED} **Set Timezone:** ${addedRole}`;
+                    response = `${EMOJI_ADDED} Role Added`; // UPDATED RESPONSE
                 } else if (removedRolesCount > 0 && selectedRoleIds.length === 0) {
-                    response += `\
-${EMOJI_REMOVED} **Timezone removed.**`;
-                } else {
-                    response = "No changes were made to your timezone role.";
+                    response = `${EMOJI_REMOVED} Role removed.`;
                 }
 
                 return interaction.editReply({
@@ -682,7 +749,6 @@ ${EMOJI_REMOVED} **Timezone removed.**`;
                 });
             }
 
-            // --- ORIGINAL SELECT MENU SUBMISSION (Pronouns, Pings, Sessions) ─────
             let roleList;
             switch (interaction.customId) {
                 case "select_pronouns":
@@ -701,10 +767,7 @@ ${EMOJI_REMOVED} **Timezone removed.**`;
             const member = interaction.member;
             const selectedRoleIds = interaction.values;
             const memberRoles = member.roles;
-            let addedRoles = [];
-            let removedRoles = [];
 
-            // Loop through all roles in this category
             for (const role of roleList) {
                 const roleId = role.roleId;
                 if (!roleId) continue;
@@ -713,44 +776,19 @@ ${EMOJI_REMOVED} **Timezone removed.**`;
                 const wantsRole = selectedRoleIds.includes(roleId);
 
                 if (wantsRole && !hasRole) {
-                    // ADD ROLE
-                    await memberRoles.add(roleId).then(() => {
-                        addedRoles.push(`<@&${roleId}>`);
-                    }).catch(e => console.error(`\\[ERROR\\] Failed to add role ${roleId} to ${member.user.tag}. Check bot's MANAGE ROLES permission and role hierarchy.`, e));
+                    await memberRoles.add(roleId).catch(e => console.error(`\\[ERROR\\] Failed to add role ${roleId}.`, e));
                 } else if (!wantsRole && hasRole) {
-                    // REMOVE ROLE
-                    await memberRoles.remove(roleId).then(() => {
-                        removedRoles.push(`<@&${roleId}>`);
-                    }).catch(e => console.error(`\\[ERROR\\] Failed to remove role ${roleId} from ${member.user.tag}. Check bot's MANAGE ROLES permission and role hierarchy.`, e));
+                    await memberRoles.remove(roleId).catch(e => console.error(`\\[ERROR\\] Failed to remove role ${roleId}.`, e));
                 }
             }
 
-            // Build confirmation message
-            let response = "Your roles have been updated!";
-            if (addedRoles.length > 0) {
-                response += `\
-${EMOJI_ADDED} **Added:** ${addedRoles.join(", ")}`;
-            }
-            if (removedRoles.length > 0) {
-                response += `\
-${EMOJI_REMOVED} **Removed:** ${removedRoles.join(", ")}`;
-            }
-            if (addedRoles.length === 0 && removedRoles.length === 0) {
-                response = "No changes were made to your roles.";
-            }
-
             await interaction.editReply({
-                content: response,
+                content: `${EMOJI_ADDED} Role Added`, // UPDATED RESPONSE
             });
         }
 
     } catch (e) {
         console.error("\\[ERROR\\] Critical error processing interactionCreate event:", e);
-        if (interaction.deferred) {
-            interaction.editReply({ content: "A critical and unexpected error occurred while processing your request. Please check the bot logs for details." }).catch(() => {});
-        } else if (!interaction.replied) {
-            interaction.reply({ content: "A critical and unexpected error occurred.", ephemeral: true }).catch(() => {});
-        }
     }
 });
 
@@ -804,7 +842,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// ─── MEMBER JOIN (Automated Welcome) ───────────────────────
+// ─── MEMBER JOIN ───────────────────────
 
 client.on("guildMemberAdd", async (member) => {
     try {
@@ -819,8 +857,11 @@ client.on("guildMemberAdd", async (member) => {
 client.once("ready", async () => {
     console.log(`Bot online as ${client.user.tag}`);
     await loadRolesConfig();
-    // Register slash commands upon startup
     await registerSlashCommands(client.user.id, null, process.env.BOT_TOKEN);
+    
+    // Start Member Counter
+    setInterval(checkGroup, CHECK_INTERVAL);
+    await checkGroup();
 });
 
 // ─── KEEP-ALIVE & LOGIN ────────────────────────────────────
