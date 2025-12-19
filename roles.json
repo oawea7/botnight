@@ -8,121 +8,41 @@
     "shifts": "<:f_floweryellow:1438665987145728051>"
   },
   "PRONOUN_ROLES": [
-    {
-      "label": "He/him",
-      "roleId": "1402704897786511462"
-    },
-    {
-      "label": "She/her",
-      "roleId": "1402704900034527263"
-    },
-    {
-      "label": "They/them",
-      "roleId": "1402704902999769119"
-    }
+    { "label": "He/him", "roleId": "1402704897786511462" },
+    { "label": "She/her", "roleId": "1402704900034527263" },
+    { "label": "They/them", "roleId": "1402704902999769119" }
   ],
   "PINGS_ROLES": [
-    {
-      "label": "Employment",
-      "roleId": "1403445445786734742"
-    },
-    {
-      "label": "Development",
-      "roleId": "1402729341544169604"
-    },
-    {
-      "label": "Alliances",
-      "roleId": "1402729345130303550"
-    },
-    {
-      "label": "Events",
-      "roleId": "1402729563586298068"
-    },
-    {
-      "label": "Engagement",
-      "roleId": "1402729345860112469"
-    },
-    {
-      "label": "Awareness",
-      "roleId": "1403023171900280872"
-    },
-    {
-      "label": "Chat Revive",
-      "roleId": "1402729692112486471"
-    }
+    { "label": "Employment", "roleId": "1403445445786734742" },
+    { "label": "Development", "roleId": "1402729341544169604" },
+    { "label": "Alliances", "roleId": "1402729345130303550" },
+    { "label": "Events", "roleId": "1402729563586298068" },
+    { "label": "Engagement", "roleId": "1402729345860112469" },
+    { "label": "Awareness", "roleId": "1403023171900280872" },
+    { "label": "Chat Revive", "roleId": "1402729692112486471" }
   ],
   "SHIFTS_ROLES": [
-    {
-      "label": "Trainings",
-      "roleId": "1402729335152185374"
-    },
-    {
-      "label": "Shifts",
-      "roleId": "1402729344052232242"
-    }
+    { "label": "Trainings", "roleId": "1402729335152185374" },
+    { "label": "Shifts", "roleId": "1402729344052232242" }
   ],
   "MANAGEMENT_ROLES": [
-    {
-      "label": "Staff Birthdays",
-      "roleId": "1402729685527429182"
-    },
-    {
-      "label": "Alliance Visits",
-      "roleId": "1442988716313411594"
-    }
+    { "label": "Staff Birthdays", "roleId": "1402729685527429182" },
+    { "label": "Alliance Visits", "roleId": "1442988716313411594" }
   ],
   "TIMEZONE_ROLES": [
-    {
-      "label": "GMT -8 (PST/PDT)",
-      "roleId": "1418662112389234708"
-    },
-    {
-      "label": "GMT -6 (CST/CDT)",
-      "roleId": "1418241166159380551"
-    },
-    {
-      "label": "GMT -5 (EST/EDT)",
-      "roleId": "1418260535476097094"
-    },
-    {
-      "label": "GMT -3:30 (NST)",
-      "roleId": "1438560845620838471"
-    },
-    {
-      "label": "GMT -3 (AST)",
-      "roleId": "1441209637889376488"
-    },
-    {
-      "label": "GMT -1",
-      "roleId": "1447303642607779922"
-    },
-    {
-      "label": "GMT 0 (UK)",
-      "roleId": "1418228585004531794"
-    },
-    {
-      "label": "GMT +1 (CET)",
-      "roleId": "1429399823857221702"
-    },
-    {
-      "label": "GMT +2 (EET)",
-      "roleId": "1418229096378269867"
-    },
-    {
-      "label": "GMT +3",
-      "roleId": "1439580363419553903"
-    },
-    {
-      "label": "GMT +4",
-      "roleId": "1439013856310460506"
-    },
-    {
-      "label": "GMT +5:30 (IST)",
-      "roleId": "1447381524164116660"
-    },
-    {
-      "label": "GMT +8",
-      "roleId": "1438557821896491008"
-    }
+    { "label": "GMT -8 (PST/PDT)", "roleId": "1418662112389234708" },
+    { "label": "GMT -6 (CST/CDT)", "roleId": "1418241166159380551" },
+    { "label": "GMT -5 (EST/EDT)", "roleId": "1418260535476097094" },
+    { "label": "GMT -3:30 (NST)", "roleId": "1438560845620838471" },
+    { "label": "GMT -3 (AST)", "roleId": "1441209637889376488" },
+    { "label": "GMT -1", "roleId": "1447303642607779922" },
+    { "label": "GMT 0 (UK)", "roleId": "1418228585004531794" },
+    { "label": "GMT +1 (CET)", "roleId": "1429399823857221702" },
+    { "label": "GMT +2 (EET)", "roleId": "1418229096378269867" },
+    { "label": "GMT +3", "roleId": "1439580363419553903" },
+    { "label": "GMT +4", "roleId": "1439013856310460506" },
+    { "label": "GMT +5:30 (IST)", "roleId": "1447381524164116660" },
+    { "label": "GMT +8", "roleId": "1438557821896491008" },
+    { "label": "GMT +11", "roleId": "1451117360684470303" }
   ]
 }
